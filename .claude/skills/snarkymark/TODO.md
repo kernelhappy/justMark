@@ -1,6 +1,5 @@
 # TODO
 
-- [ ] User: live with B for a while; if 0.6–0.8 s feels laggy, build A (pre-loaded hidden window) and re-measure.
 - [ ] User: turn off Snipping Tool notifications (Settings → System → Notifications) so its toast doesn't
       compete with snarkymark; keep "Automatically save screenshots" on.
 - [ ] Verify "Start at login" toggle by hand (not exercised in automation, to avoid writing HKCU Run).
