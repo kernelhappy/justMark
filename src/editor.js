@@ -88,6 +88,7 @@ let busy = false;
 async function run(key) {
   const act = ACTIONS[key];
   if (!act || !png || busy) return;
+  finishEdit(); // toolbar presses keep an open text focused, so its typed text isn't in shapes yet
   busy = true;
   $('status').textContent = 'Working…';
   try {

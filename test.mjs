@@ -210,9 +210,9 @@ globalThis.document = { querySelector: () => null }; // no Save menu open
   const src = (await import('node:fs')).readFileSync('./src/editor.js', 'utf8');
   const els = {}, $ = id => (els[id] ??= { value: 'png', textContent: '' }), opts = { format: { value: 'png' } };
   let result;
-  const [run, saved] = new Function('$', 'encode', 'invoke', 'png', 'state', 'opts',
+  const [run, saved] = new Function('$', 'encode', 'invoke', 'png', 'state', 'opts', 'finishEdit',
     `let saved = 'blank'; const ACTIONS = {${src.match(/async save\(fmt\) \{[\s\S]*?\n  \},/)[0]}}; ${src.match(/let busy = false;[\s\S]*?\n\}/)[0]}; return [run, () => saved];`)(
-    $, async () => new Blob(['x']), async (cmd, body, o) => { assert.deepStrictEqual([cmd, o.headers.ext], ['save', 'png']); return result(); }, {}, () => 'drawn', opts);
+    $, async () => new Blob(['x']), async (cmd, body, o) => { assert.deepStrictEqual([cmd, o.headers.ext], ['save', 'png']); return result(); }, {}, () => 'drawn', opts, () => {});
   result = () => { throw 'Access is denied. (os error 5)'; };
   await run('save');
   assert.strictEqual(els.status.textContent, 'Failed: Access is denied. (os error 5)', 'failed write not reported');
@@ -223,6 +223,16 @@ globalThis.document = { querySelector: () => null }; // no Save menu open
   result = () => 'x.png';
   await run('save');
   assert.deepStrictEqual([els.status.textContent, saved()], ['Saved x.png', 'drawn']);
+}
+// Save/Copy with a text still open (toolbar presses keep the editor focused) must export the typed text, not the text from before the edit.
+{
+  const src = (await import('node:fs')).readFileSync('./src/editor.js', 'utf8');
+  const els = {}, $ = id => (els[id] ??= { value: 'png', textContent: '' }), opts = { format: { value: 'png' } }, log = [];
+  const run = new Function('$', 'png', 'state', 'opts', 'finishEdit', 'ACTIONS',
+    `let saved; ${src.match(/let busy = false;[\s\S]*?\n\}/)[0]}; return run;`)(
+    $, {}, () => 's', opts, () => log.push('finish'), { copy: async () => (log.push('encode'), 'Copied') });
+  await run('copy');
+  assert.deepStrictEqual(log, ['finish', 'encode'], 'Copy exported before the open text edit was finished');
 }
 // Esc steps back to Select, then closes; closing with unsaved markup asks first.
 {
