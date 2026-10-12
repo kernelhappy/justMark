@@ -19,9 +19,10 @@ use tauri::{
     RunEvent, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent,
 };
 
-/// Window label -> the image it edits, and when it arrived (for the startup timing on stderr).
+/// Window label -> the image it edits, when it arrived (for the startup timing on stderr),
+/// and whether the watcher saw it created (only then can it still be being written).
 #[derive(Default)]
-struct Shots(Mutex<HashMap<String, (PathBuf, Instant)>>);
+struct Shots(Mutex<HashMap<String, (PathBuf, Instant, bool)>>);
 
 fn is_image(p: &Path) -> bool {
     p.extension().is_some_and(|e| ["png", "jpg", "jpeg"].iter().any(|x| e.eq_ignore_ascii_case(x)))
@@ -44,7 +45,7 @@ fn wait_complete(p: &Path) {
 }
 
 /// One hidden window per image; the page shows it once the image is laid out (see `ready`).
-fn open(app: &AppHandle, path: PathBuf, t0: Instant) {
+fn open(app: &AppHandle, path: PathBuf, t0: Instant, from_watcher: bool) {
     static N: AtomicUsize = AtomicUsize::new(0);
     let label = format!("shot{}", N.fetch_add(1, Ordering::Relaxed));
     let name = path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
@@ -53,7 +54,7 @@ fn open(app: &AppHandle, path: PathBuf, t0: Instant) {
         .bytes()
         .map(|b| if b.is_ascii_alphanumeric() { (b as char).to_string() } else { format!("%{b:02X}") })
         .collect();
-    app.state::<Shots>().0.lock().unwrap().insert(label.clone(), (path, t0));
+    app.state::<Shots>().0.lock().unwrap().insert(label.clone(), (path, t0, from_watcher));
     let built = WebviewWindowBuilder::new(app, &label, WebviewUrl::App(format!("index.html#{hash}").into()))
         .title(&name)
         .visible(false)
@@ -67,9 +68,27 @@ fn open(app: &AppHandle, path: PathBuf, t0: Instant) {
 /// Off the main thread (async): it can wait for the file, which the window started loading alongside.
 #[tauri::command(async)]
 fn shot(w: WebviewWindow, shots: State<Shots>) -> Result<Response, String> {
-    let path = shots.0.lock().unwrap().get(w.label()).map(|s| s.0.clone()).ok_or("no image for this window")?;
-    wait_complete(&path);
-    std::fs::read(path).map(Response::new).map_err(|e| e.to_string())
+    let (path, from_watcher) = shots.0.lock().unwrap().get(w.label()).map(|s| (s.0.clone(), s.2)).ok_or("no image for this window")?;
+    load(&path, from_watcher).map(Response::new).map_err(|e| e.to_string())
+}
+
+/// Files from argv are already complete, and may not end in IEND/FFD9 (e.g. a Motion Photo): only wait for the watcher's.
+fn load(p: &Path, from_watcher: bool) -> std::io::Result<Vec<u8>> {
+    if from_watcher {
+        wait_complete(p);
+    }
+    std::fs::read(p)
+}
+
+#[test]
+fn opened_files_are_read_without_waiting_for_an_end_marker() {
+    // A Motion Photo: a complete JPEG with an MP4 after its FFD9.
+    let p = std::env::temp_dir().join("snarkymark-trailer-test.jpg");
+    std::fs::write(&p, b"\xFF\xD8jpeg\xFF\xD9ftypmp4 trailer").unwrap();
+    let t = Instant::now();
+    load(&p, false).unwrap();
+    assert!(t.elapsed() < Duration::from_secs(1), "{:?}", t.elapsed());
+    let _ = std::fs::remove_file(p);
 }
 
 /// Save: the Windows Save dialog, then the page's encoded bytes (the request body) go to the picked file.
@@ -127,7 +146,7 @@ fn fit_shows_the_capture_at_actual_size_on_another_dpi() {
 /// monitor under the cursor (where the snip was just taken), center it there and show it.
 #[tauri::command]
 fn ready(w: WebviewWindow, shots: State<Shots>, img: (f64, f64), chrome: (f64, f64), min: (f64, f64)) {
-    if let Some((_, t0)) = shots.0.lock().unwrap().get(w.label()) {
+    if let Some((_, t0, _)) = shots.0.lock().unwrap().get(w.label()) {
         eprintln!("{} ready {:?}", w.label(), t0.elapsed());
     }
     let cursor = w.cursor_position().unwrap_or_default();
@@ -177,7 +196,7 @@ fn main() {
         // A second launch (e.g. "Open with") hands its files to the running tray instance.
         .plugin(tauri_plugin_single_instance::init(|app, argv, _| {
             for a in argv.into_iter().skip(1) {
-                open(app, a.into(), Instant::now());
+                open(app, a.into(), Instant::now(), false);
             }
         }))
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, None))
@@ -191,7 +210,7 @@ fn main() {
         .setup(|app| {
             let h = app.handle().clone();
             for a in std::env::args().skip(1) {
-                open(&h, a.into(), Instant::now());
+                open(&h, a.into(), Instant::now(), false);
             }
             // Start at login is an HKCU Run entry for this exe, off until ticked here.
             let login = CheckMenuItem::with_id(app, "login", "Start at login", true, app.autolaunch().is_enabled()?, None::<&str>)?;
@@ -225,7 +244,7 @@ fn main() {
                         return;
                     }
                     for p in e.paths.into_iter().filter(|p| is_image(p)) {
-                        open(&h, p, Instant::now());
+                        open(&h, p, Instant::now(), true);
                     }
                 })?;
                 watcher.watch(&dir, RecursiveMode::NonRecursive)?;
