@@ -83,12 +83,14 @@ const state = () => hist[step] + JSON.stringify(off);
 let saved = '[]{"x":0,"y":0}';
 const closeEditor = () => (state() === saved || confirm('Close without saving or copying your markup?')) && invoke('close');
 
-// One action at a time: a second Save would open a second dialog, and encodes are heavy.
-let busy = false;
+// One action at a time: a second Save would open a second dialog, and encodes are heavy. A press while one runs waits
+// its turn (the latest wins), so a second Copy exports what's on screen then instead of being dropped (filled boxes redact).
+let busy = false, next = null;
 async function run(key) {
   const act = ACTIONS[key];
-  if (!act || !png || busy) return;
+  if (!act || !png) return;
   finishEdit(); // toolbar presses keep an open text focused, so its typed text isn't in shapes yet
+  if (busy) { next = key; return; }
   busy = true;
   $('status').textContent = 'Working…';
   try {
@@ -100,6 +102,7 @@ async function run(key) {
   } finally {
     busy = false;
   }
+  if (next) { const k = next; next = null; return run(k); }
 }
 document.onclick = ({ target }) => run(target.dataset.act);
 
@@ -480,7 +483,7 @@ onkeydown = e => {
   if ((e.ctrlKey || e.metaKey) && (/^[a-z]$/i.test(e.key) ? e.key.toLowerCase() === 'p' : e.code === 'KeyP')) {
     e.preventDefault();
     finishEdit();
-    return run('print');
+    return e.repeat || run('print');
   }
   if (gesture) return;
   if (cropping()) {
@@ -498,7 +501,7 @@ onkeydown = e => {
     go(k === 'y' || e.shiftKey ? 1 : -1);
   } else if ((e.ctrlKey || e.metaKey) && (k === 's' || k === 'c')) {
     e.preventDefault();
-    run(k === 's' ? 'save' : 'copy');
+    if (!e.repeat) run(k === 's' ? 'save' : 'copy'); // a held Ctrl+S would queue a second Save dialog
   } else if ((e.key === 'Delete' || e.key === 'Backspace') && e.target.tagName !== 'INPUT') remove();
   else if (e.key === 'Escape') {
     if (document.querySelector(':popover-open')) return; // the Save menu closes itself

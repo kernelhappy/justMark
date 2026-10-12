@@ -211,7 +211,7 @@ globalThis.document = { querySelector: () => null }; // no Save menu open
   const els = {}, $ = id => (els[id] ??= { value: 'png', textContent: '' }), opts = { format: { value: 'png' } };
   let result;
   const [run, saved] = new Function('$', 'encode', 'invoke', 'png', 'state', 'opts', 'finishEdit',
-    `let saved = 'blank'; const ACTIONS = {${src.match(/async save\(fmt\) \{[\s\S]*?\n  \},/)[0]}}; ${src.match(/let busy = false;[\s\S]*?\n\}/)[0]}; return [run, () => saved];`)(
+    `let saved = 'blank'; const ACTIONS = {${src.match(/async save\(fmt\) \{[\s\S]*?\n  \},/)[0]}}; ${src.match(/let busy[\s\S]*?\n\}/)[0]}; return [run, () => saved];`)(
     $, async () => new Blob(['x']), async (cmd, body, o) => { assert.deepStrictEqual([cmd, o.headers.ext], ['save', 'png']); return result(); }, {}, () => 'drawn', opts, () => {});
   result = () => { throw 'Access is denied. (os error 5)'; };
   await run('save');
@@ -229,7 +229,7 @@ globalThis.document = { querySelector: () => null }; // no Save menu open
   const src = (await import('node:fs')).readFileSync('./src/editor.js', 'utf8');
   const els = {}, $ = id => (els[id] ??= { value: 'png', textContent: '' }), opts = { format: { value: 'png' } }, log = [];
   const run = new Function('$', 'png', 'state', 'opts', 'finishEdit', 'ACTIONS',
-    `let saved; ${src.match(/let busy = false;[\s\S]*?\n\}/)[0]}; return run;`)(
+    `let saved; ${src.match(/let busy[\s\S]*?\n\}/)[0]}; return run;`)(
     $, {}, () => 's', opts, () => log.push('finish'), { copy: async () => (log.push('encode'), 'Copied') });
   await run('copy');
   assert.deepStrictEqual(log, ['finish', 'encode'], 'Copy exported before the open text edit was finished');
@@ -314,5 +314,21 @@ globalThis.document = { querySelector: () => null }; // no Save menu open
   const keys = [...html.matchAll(/data-key="(\w)"/g)].map(m => m[1]);
   assert.strictEqual(new Set(keys).size, keys.length, 'duplicate data-key');
   globalThis.document = { querySelector: () => null };
+}
+// A Copy pressed while an earlier one is still encoding runs after it, on what's on screen then, instead of being dropped (bughunt export-r3-1).
+{
+  const src = (await import('node:fs')).readFileSync('./src/editor.js', 'utf8').match(/let busy[\s\S]*?\n}\n/)[0];
+  const copied = [];
+  let screen = 'no box', release;
+  const ACTIONS = { async copy() { const at = screen; await new Promise(r => { release ??= r; if (release !== r) r(); }); copied.push(at); return 'Copied as PNG'; } };
+  const status = {};
+  const run = new Function('ACTIONS', 'png', 'finishEdit', '$', 'state', 'opts', `let saved; ${src} return run;`)(
+    ACTIONS, {}, () => {}, () => status, () => screen, { format: {} });
+  const first = run('copy');
+  screen = 'box';
+  const second = run('copy');
+  release();
+  await first; await second;
+  assert.deepStrictEqual(copied, ['no box', 'box'], 'second Copy during an encode is dropped');
 }
 console.log('ok');
