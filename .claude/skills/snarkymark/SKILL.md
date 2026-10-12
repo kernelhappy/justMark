@@ -37,7 +37,8 @@ when changing anything structural (see Budgets).
   - `shot` (async) → raw bytes of this window's image (`Shots` map: window label → path). Waits for the
     PNG `IEND` / JPEG `FFD9` end marker first, so the window starts loading while Snipping Tool is
     still writing.
-  - `ready(width, height)` → size/position/show (CSS px in).
+  - `ready(img, chrome, min)` → size/position/show. `img` = capture in image px; `chrome`, `min` in CSS px
+    (Rust scales them by the target monitor's scale, not the hidden window's).
   - `save` → body = encoded bytes, header `ext` ∈ png|jpg|pdf. Rust shows the Windows Save dialog
     (`rfd`, parented to the editor), suggests `<image stem>.<ext>`, writes `<name>.part` then renames.
     Returns the file name or null on cancel.

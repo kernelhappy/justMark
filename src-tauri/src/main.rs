@@ -110,25 +110,39 @@ fn close(w: WebviewWindow) {
     let _ = w.destroy();
 }
 
-/// The page knows how big it wants to be (CSS px): size the window to that, within the work area of the
+/// Inner size: the capture at actual size (`img`, physical px) plus the page's chrome (CSS px at the monitor's scale `s`),
+/// at least `min` CSS px, at most 90% of the work area.
+fn fit(img: (f64, f64), chrome: (f64, f64), min: (f64, f64), s: f64, area: PhysicalSize<u32>) -> PhysicalSize<u32> {
+    let side = |i: f64, c: f64, m: f64, a: u32| ((i + c * s).max(m * s) as u32).min(a * 9 / 10);
+    PhysicalSize::new(side(img.0, chrome.0, min.0, area.width), side(img.1, chrome.1, min.1, area.height))
+}
+
+#[test]
+fn fit_shows_the_capture_at_actual_size_on_another_dpi() {
+    // Snip on a 150% monitor, whatever the scale where the hidden window was made: a 2000 px capture plus 48 CSS px of chrome.
+    assert_eq!(fit((2000.0, 600.0), (48.0, 160.0), (960.0, 480.0), 1.5, PhysicalSize::new(3840, 2160)).width, 2000 + 72);
+}
+
+/// The page knows how big it wants to be: size the window to that, within the work area of the
 /// monitor under the cursor (where the snip was just taken), center it there and show it.
 #[tauri::command]
-fn ready(w: WebviewWindow, shots: State<Shots>, width: f64, height: f64) {
+fn ready(w: WebviewWindow, shots: State<Shots>, img: (f64, f64), chrome: (f64, f64), min: (f64, f64)) {
     if let Some((_, t0)) = shots.0.lock().unwrap().get(w.label()) {
         eprintln!("{} ready {:?}", w.label(), t0.elapsed());
     }
     let cursor = w.cursor_position().unwrap_or_default();
     let mon = w.monitor_from_point(cursor.x, cursor.y).ok().flatten().or_else(|| w.primary_monitor().ok().flatten());
     if let Some(m) = mon {
-        let (area, s) = (m.work_area(), m.scale_factor());
-        let size = PhysicalSize::new(
-            ((width * s) as u32).min(area.size.width * 9 / 10),
-            ((height * s) as u32).min(area.size.height * 9 / 10),
-        );
+        let area = m.work_area();
+        // Onto that monitor before sizing: crossing to another scale rescales the window (WM_DPICHANGED), undoing the size.
+        let _ = w.set_position(area.position);
+        let size = fit(img, chrome, min, m.scale_factor(), area.size);
         let _ = w.set_size(size);
+        // set_size is the inner size but set_position places the frame: center the outer size.
+        let outer = w.outer_size().unwrap_or(size);
         let _ = w.set_position(PhysicalPosition::new(
-            area.position.x + (area.size.width - size.width) as i32 / 2,
-            area.position.y + (area.size.height - size.height) as i32 / 2,
+            area.position.x + (area.size.width as i32 - outer.width as i32) / 2,
+            area.position.y + (area.size.height as i32 - outer.height as i32) / 2,
         ));
     }
     let _ = w.show();

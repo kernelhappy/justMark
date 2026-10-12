@@ -123,13 +123,15 @@ function applyZoom() {
 }
 // While a crop or Undo crop swaps the image, gestures wait: until it loads, the old image's geometry would meet the new offset.
 let swapping = false, shown = false;
-// The window starts hidden; Rust sizes it to what the page asks for (CSS px, capped to the screen) and shows it.
+// The window starts hidden; Rust sizes it to what the page asks for (capped to the screen) and shows it.
+// The capture goes in image px, not over devicePixelRatio: that is the scale where the hidden window was made, maybe not
+// the monitor it opens on. Chrome and minimum are CSS px, which Rust scales for that monitor.
 // 960 wide keeps the top bar on one row and the style dock clear of the zoom pill; 104/120 is the room the dock takes below.
-const show = (w, h) => shown || (shown = true, invoke('ready', { width: Math.max(960, w + 48), height: Math.max(480, header.offsetHeight + h + 120) }));
+const show = (w, h) => shown || (shown = true, invoke('ready', { img: [w, h], chrome: [48, header.offsetHeight + 120], min: [960, 480] }));
 shot.onload = () => {
   swapping = false;
   applyZoom();
-  show(shot.naturalWidth / devicePixelRatio, shot.naturalHeight / devicePixelRatio); // the capture at actual size, plus the chrome
+  show(shot.naturalWidth, shot.naturalHeight); // the capture at actual size, plus the chrome
 };
 shot.onerror = () => { $('status').textContent ||= "Can't open this image."; show(0, 0); };
 if (!png) show(0, 0);
