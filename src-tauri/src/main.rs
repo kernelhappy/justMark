@@ -135,6 +135,14 @@ fn ready(w: WebviewWindow, shots: State<Shots>, width: f64, height: f64) {
     let _ = w.set_focus();
 }
 
+/// SHGetKnownFolderPath (as known_folders calls it) fails while the Screenshots folder doesn't exist yet,
+/// so fall back to its default place under Pictures and create it, so Snipping Tool's later saves are still seen.
+fn screenshots_dir(known: Option<PathBuf>, pictures: Option<PathBuf>) -> Option<PathBuf> {
+    let dir = known.or_else(|| Some(pictures?.join("Screenshots")))?;
+    std::fs::create_dir_all(&dir).ok()?;
+    Some(dir)
+}
+
 #[test]
 fn wait_complete_waits_for_the_end_marker() {
     let p = std::env::temp_dir().join("snarkymark-wait-test.png");
@@ -192,19 +200,27 @@ fn main() {
                 .build(app)?;
 
             // Snipping Tool's auto-save lands here. Only creations count (see `save` for why that matters).
-            let dir = known_folders::get_known_folder_path(known_folders::KnownFolder::Screenshots)
-                .ok_or("no Screenshots folder")?;
-            let mut watcher = notify::recommended_watcher(move |r: notify::Result<notify::Event>| {
-                let Ok(e) = r else { return };
-                if !matches!(e.kind, EventKind::Create(_)) {
-                    return;
-                }
-                for p in e.paths.into_iter().filter(|p| is_image(p)) {
-                    open(&h, p, Instant::now());
-                }
-            })?;
-            watcher.watch(&dir, RecursiveMode::NonRecursive)?;
-            std::mem::forget(watcher); // watches for the life of the process
+            // Not being able to watch it must not cost the tray and Open with.
+            let watch = move || -> Result<(), Box<dyn std::error::Error>> {
+                use known_folders::{get_known_folder_path, KnownFolder};
+                let dir = screenshots_dir(get_known_folder_path(KnownFolder::Screenshots), get_known_folder_path(KnownFolder::Pictures))
+                    .ok_or("no Screenshots folder")?;
+                let mut watcher = notify::recommended_watcher(move |r: notify::Result<notify::Event>| {
+                    let Ok(e) = r else { return };
+                    if !matches!(e.kind, EventKind::Create(_)) {
+                        return;
+                    }
+                    for p in e.paths.into_iter().filter(|p| is_image(p)) {
+                        open(&h, p, Instant::now());
+                    }
+                })?;
+                watcher.watch(&dir, RecursiveMode::NonRecursive)?;
+                std::mem::forget(watcher); // watches for the life of the process
+                Ok(())
+            };
+            if let Err(e) = watch() {
+                eprintln!("not watching Screenshots: {e}");
+            }
             Ok(())
         })
         .build(tauri::generate_context!())
@@ -215,4 +231,13 @@ fn main() {
             api.prevent_exit();
         }
     });
+}
+
+#[test]
+fn screenshots_dir_is_created_when_missing() {
+    let pics = std::env::temp_dir().join("snarkymark-pictures-test");
+    let _ = std::fs::remove_dir_all(&pics);
+    let dir = screenshots_dir(None, Some(pics.clone())).unwrap();
+    assert!(dir == pics.join("Screenshots") && dir.is_dir());
+    let _ = std::fs::remove_dir_all(pics);
 }
