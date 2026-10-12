@@ -479,8 +479,9 @@ stage.onpointercancel = stage.onlostpointercapture = e => {
   gesture = false;
 };
 onkeydown = e => {
-  // Chrome's print shortcut follows the letter on Latin layouts (Dvorak too) and the physical P key on others.
-  if ((e.ctrlKey || e.metaKey) && (/^[a-z]$/i.test(e.key) ? e.key.toLowerCase() === 'p' : e.code === 'KeyP')) {
+  // Shortcuts follow the letter on Latin layouts (Dvorak too) and the physical key on others, like Chrome's print.
+  const k = /^[a-z]$/i.test(e.key) ? e.key.toLowerCase() : /^Key[A-Z]$/.test(e.code) ? e.code[3].toLowerCase() : e.key.toLowerCase();
+  if ((e.ctrlKey || e.metaKey) && k === 'p') {
     e.preventDefault();
     finishEdit();
     return e.repeat || run('print');
@@ -495,7 +496,6 @@ onkeydown = e => {
     if (e.key === 'Escape' && !e.isComposing) finishEdit();
     return;
   }
-  const k = e.key.toLowerCase();
   if ((e.ctrlKey || e.metaKey) && (k === 'z' || k === 'y')) {
     e.preventDefault();
     go(k === 'y' || e.shiftKey ? 1 : -1);
@@ -510,9 +510,9 @@ onkeydown = e => {
     cur = null;
     tool = stage.dataset.tool = 'select';
     render();
-  } else if (/^[a-z]$/i.test(e.key) && !e.ctrlKey && !e.metaKey && !e.altKey && e.target.tagName !== 'INPUT') {
+  } else if (/^[a-z]$/.test(k) && !e.ctrlKey && !e.metaKey && !e.altKey && e.target.tagName !== 'INPUT') {
     // Single-letter tool keys: the button's data-key (shown in its tooltip) is the binding.
-    document.querySelector(`[data-key="${e.key.toUpperCase()}"]`)?.click();
+    document.querySelector(`[data-key="${k.toUpperCase()}"]`)?.click();
   }
 };
 

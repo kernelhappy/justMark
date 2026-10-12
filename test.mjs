@@ -109,6 +109,16 @@ globalThis.document = { querySelector: () => null }; // no Save menu open
   h({ metaKey: true, key: 'z', target: { tagName: 'BODY' }, preventDefault: () => {} });
   h({ metaKey: true, shiftKey: true, key: 'z', target: { tagName: 'BODY' }, preventDefault: () => {} });
   assert.deepStrictEqual(steps, [-1, 1], 'Cmd+Z / Cmd+Shift+Z did not undo / redo');
+  // Non-Latin layouts: Ctrl+Z/S and tool keys follow the physical key (Russian я = KeyZ, ы = KeyS, к = KeyR).
+  globalThis.document = { querySelector: q => q === '[data-key="R"]' ? { click: () => steps.push('R') } : null };
+  const ranRu = [];
+  const r = new Function('run', 'finishEdit', 'cropping', 'marking', 'remove', 'edit', 'go', 'render', 'stage', `let gesture = false, cur = 0, tool = 'select', onkeydown; ${src.match(/onkeydown = e => \{[\s\S]*?\n\};/)[0]} return onkeydown;`)(
+    a => ranRu.push(a), () => {}, () => false, () => false, () => {}, {}, d => steps.push(d), () => {}, { dataset: {} });
+  r({ ctrlKey: true, key: 'я', code: 'KeyZ', target: { tagName: 'BODY' }, preventDefault: () => {} });
+  r({ ctrlKey: true, key: 'ы', code: 'KeyS', target: { tagName: 'BODY' }, preventDefault: () => {} });
+  r({ key: 'к', code: 'KeyR', target: { tagName: 'BODY' } });
+  assert.deepStrictEqual([steps.slice(2), ranRu], [[-1, 'R'], ['save']], 'shortcuts dead on a non-Latin layout');
+  globalThis.document = { querySelector: () => null };
   // Esc during IME composition belongs to the IME; it must not end the edit.
   let fin = 0;
   const edit = {};
