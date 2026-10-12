@@ -1,0 +1,12 @@
+{
+  "name": "snarkymark",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "tauri": "tauri",
+    "test": "node test.mjs"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.12.2"
+  }
+}

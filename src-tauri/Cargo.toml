@@ -1,0 +1,20 @@
+[package]
+name = "snarkymark"
+version = "0.1.0"
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2.7", features = [] }
+
+[dependencies]
+tauri = { version = "2.12", features = ["tray-icon"] }
+tauri-plugin-single-instance = "2.5"
+tauri-plugin-autostart = "2.7"
+notify = "8.2"
+known-folders = "1.4"
+rfd = { version = "0.17", default-features = false }
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
