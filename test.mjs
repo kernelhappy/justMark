@@ -254,6 +254,13 @@ globalThis.document = { querySelector: () => null }; // no Save menu open
   ask(() => 'a', 'a', () => assert.fail('asked with nothing unsaved'), c => closed.push(c))();
   ask(() => 'b', 'a', () => false, c => closed.push(c))();
   assert.deepStrictEqual(closed, ['close'], 'closed despite a declined confirm');
+  // A crop anchored at the top-left corner (or a different crop from the same corner) is still unsaved work.
+  const crop = new Function('png', 'endCrop', 'setShot', 'createImageBitmap', 'OffscreenCanvas',
+    `let off = { x: 0, y: 0 }, hist = ['[]'], step = 0, box, original, swapping; ${src.match(/const state = .*/)[0]} let saved = state(); ${src.match(/async function applyCrop[\s\S]*?\n}/)[0]}
+    return async b => { box = b; const was = saved; await applyCrop(); saved = state(); return was !== saved; };`)(
+    {}, () => {}, () => {}, async () => ({}), class { getContext() { return { drawImage() {} }; } convertToBlob() { return {}; } });
+  assert.ok(await crop({ l: 0, t: 0, r: 50, b: 40 }), 'a crop at (0,0) counted as saved');
+  assert.ok(await crop({ l: 0, t: 0, r: 30, b: 20 }), 'a different crop from the same corner counted as saved');
 }
 // Editing text in a light swatch (White/Yellow) must not sit on #edit's near-white CSS background.
 {

@@ -200,7 +200,7 @@ async function applyCrop() {
     const blob = await c.convertToBlob({ type: 'image/png' });
     if (png !== src) return; // Undo crop landed meanwhile; applying now would make original a cropped image
     original ??= src;
-    off = { x: o.x + x, y: o.y + y };
+    off = { x: o.x + x, y: o.y + y, w, h }; // w, h: only so state() sees a crop that keeps the top-left corner
     setShot(blob);
   } finally {
     if (png === src) swapping = false; // failed: no new image is coming
