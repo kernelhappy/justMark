@@ -19,7 +19,7 @@ when changing anything structural (see Budgets).
   to step back from, closes the editor. If markup or a crop exists that hasn't been Saved or Copied since,
   it asks first (`confirm`). The window's X closes without asking (explicit act).
 - One window per image. It opens hidden, the page loads the image, then asks Rust to size it (image at
-  actual size + chrome, min 1100 CSS px wide, max 90% of the work area) on the monitor under the cursor,
+  actual size + chrome, min 960×480 CSS px, max 90% of the work area) on the monitor under the cursor,
   center it there and show it.
 - **Open with / second launch**: argv files go to the running instance (single-instance plugin) and open
   like a snip. The NSIS bundle registers png/jpg/jpeg as "Editor" associations.
@@ -47,8 +47,20 @@ when changing anything structural (see Budgets).
   `result.js`/`result.html` at JustSave `5cece1b`). Shapes: highlighter, pen, line, arrow, rect, ellipse,
   cloud, text, callout; filled box redacts (burned in on every export); crop; zoom; Save (PNG/JPG/PDF),
   Copy (PNG, `navigator.clipboard.write`), Print (`print()` of the burned-in PNG). snarkymark-only
-  changes: capture comes from `invoke('shot')` (JPEG normalized to PNG at load), Markup mode on at
-  start, Ctrl+S/Ctrl+C, Esc-to-close, no browser context menu (except in the text editor).
+  changes: capture comes from `invoke('shot')` (JPEG normalized to PNG at load), always in markup
+  (JustSave's Markup toggle is gone), Ctrl+S/Ctrl+C, Esc-to-close, no browser context menu (except in
+  the text editor), and the UI below.
+- **UI layout** (redesign 2026-10-12, `index.html` only; no framework, no icon font — inline SVG sprite):
+  - *Top bar*: tool segment (each tool has a one-letter key in `data-key`, which is also the binding:
+    V H P L A R E C T B; X = Crop) · Crop / Undo crop · Undo / Redo · Copy · Save split button. Save's
+    label shows the format Ctrl+S will write; its ▾ opens a popover (Format, Quality for JPG/PDF, Print).
+  - *Style dock* (floating, bottom center): only what applies to the selected shape, else the current
+    tool (`KINDS` in editor.js → `#props[data-k]`); hidden for Select with nothing selected. While
+    cropping it becomes the crop bar (hint, Cancel, Apply).
+  - *Zoom pill* (bottom right): −, % (click = actual size), +, Fit, Fit width.
+  - *Status* is a toast above the dock; Saved/Copied fade after 2.5 s, errors stay until clicked.
+  - Theme: system light/dark via `light-dark()` tokens on `:root`; violet accent so UI state never looks
+    like ink (no swatch is violet). Tooltips are CSS (`aria-label` + `data-tip`), not `title`.
 - **Tests**: `node test.mjs` (markup/pdf/editor tests carried from JustSave + snarkymark's); `cargo test`
   in `src-tauri` (end-marker wait).
 

@@ -2,48 +2,174 @@
 <meta charset="utf-8">
 <title>snarkymark</title>
 <style>
-  :root { color-scheme: light dark; }
-  body { margin: 0; width: fit-content; min-width: 100%; box-sizing: border-box; padding: 0 16px; /* a zoomed-in stage overflows, where auto margins give no gutter */ font: 14px system-ui, sans-serif; background: light-dark(#e8e8e8, #18191c); }
-  header { position: fixed; top: 0; left: 0; right: 0; z-index: 1; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px; background: light-dark(#fff, #202124); box-shadow: 0 1px 4px #0003; }
-  #zoombar { margin-left: auto; display: flex; gap: 4px; align-items: center; }
-  #zoom { min-width: 4em; text-align: center; font-variant-numeric: tabular-nums; }
-  button, select { padding: 6px 14px; font: inherit; cursor: pointer; }
-  #status { margin-left: 8px; color: light-dark(#555, #aaa); }
-  #stage { position: relative; width: fit-content; margin: 16px auto; box-shadow: 0 1px 6px #0004; }
+  :root {
+    color-scheme: light dark;
+    /* Violet accent: no markup swatch uses it, so selection and the active tool never read as ink. */
+    --accent: light-dark(#6553f5, #8f82ff);
+    --accent-soft: light-dark(#6553f51f, #8f82ff2e);
+    --on-accent: #fff;
+    --bg: light-dark(#eceef2, #121317);
+    --dot: light-dark(#d3d7de, #262830);
+    --surface: light-dark(#ffffffe0, #1f2026e0);
+    --solid: light-dark(#fff, #24252c);
+    --line: light-dark(#0000001a, #ffffff17);
+    --text: light-dark(#1b1d22, #e9eaee);
+    --muted: light-dark(#6b7080, #9ca1ad);
+    --hover: light-dark(#0000000d, #ffffff12);
+    --press: light-dark(#00000017, #ffffff1f);
+    --danger: light-dark(#d93a32, #ff6b63);
+    --shadow: 0 1px 2px #0000001a, 0 6px 24px light-dark(#0000001f, #00000066);
+    --r: 10px;
+    --ease: cubic-bezier(.2, .7, .2, 1);
+  }
+  [hidden] { display: none !important; }
+  body {
+    margin: 0; width: fit-content; min-width: 100%; box-sizing: border-box;
+    padding: 0 16px 72px; /* bottom: room to scroll the capture clear of the floating dock */ /* sides: a zoomed-in stage overflows, where auto margins give no gutter */
+    font: 13px/1.2 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; color: var(--text);
+    background: var(--bg) radial-gradient(var(--dot) 1px, transparent 1.2px) 0 0 / 18px 18px;
+    -webkit-font-smoothing: antialiased;
+  }
+  svg.i { display: block; width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+  button > * { pointer-events: none; } /* clicks land on the button, never its icon */
+
+  /* Buttons */
+  button {
+    position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    height: 34px; min-width: 34px; padding: 0 8px; border: 0; border-radius: 8px;
+    font: inherit; color: inherit; background: transparent; cursor: pointer;
+    transition: background-color .12s, color .12s, box-shadow .12s, opacity .12s;
+  }
+  button:hover:not(:disabled) { background: var(--hover); }
+  button:active:not(:disabled) { background: var(--press); }
+  button:disabled { opacity: .35; cursor: default; }
+  button:focus-visible, input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 1px; }
+  [aria-pressed=true]:is([data-tool], [data-w], [data-fill], #crop) { background: var(--accent-soft); color: var(--accent); }
+  .btn { padding: 0 12px; font-weight: 600; }
+  .primary { background: var(--accent); color: var(--on-accent); }
+  .primary:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 88%, #000); }
+  .primary:active:not(:disabled) { background: color-mix(in srgb, var(--accent) 78%, #000); }
+  kbd { font-family: inherit; font-size: 11px; font-weight: 600; opacity: .6; }
+
+  /* Tooltips: name, shortcut and hint, after a short hover */
+  [data-tip]::after {
+    content: attr(aria-label) attr(data-tip); white-space: pre-wrap;
+    position: absolute; z-index: 5; left: 50%; top: calc(100% + 8px); translate: -50% -4px;
+    width: max-content; max-width: 240px; padding: 6px 9px; border-radius: 7px;
+    font-size: 12px; font-weight: 500; line-height: 1.35; text-align: left; color: var(--text); background: var(--solid); box-shadow: var(--shadow);
+    opacity: 0; pointer-events: none; transition: opacity .12s, translate .12s var(--ease);
+  }
+  [data-tip]:hover::after { opacity: 1; translate: -50% 0; transition-delay: .45s; }
+  .tip-up::after { top: auto; bottom: calc(100% + 8px); translate: -50% 4px; }
+  .tip-l::after { left: 0; translate: 0 -4px !important; } .tip-l:hover::after { translate: 0 0 !important; }
+  .tip-r::after { left: auto; right: 0; translate: 0 -4px !important; } .tip-r:hover::after { translate: 0 0 !important; }
+  .tip-up.tip-r::after { translate: 0 4px !important; } .tip-up.tip-r:hover::after { translate: 0 0 !important; }
+
+  /* Top bar */
+  header {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 2; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+    padding: 8px 12px; background: var(--surface); backdrop-filter: blur(16px) saturate(1.4);
+    border-bottom: 1px solid var(--line);
+  }
+  .seg { display: flex; gap: 2px; padding: 3px; border-radius: var(--r); background: var(--hover); }
+  .sep { width: 1px; height: 22px; margin: 0 4px; background: var(--line); }
+  .grow { flex: 1; }
+  .split { display: flex; gap: 1px; }
+  .split > :first-child { border-radius: 8px 0 0 8px; }
+  .split > :last-child { border-radius: 0 8px 8px 0; min-width: 28px; padding: 0 6px; }
+  #fmtlabel { font-size: 11px; font-weight: 700; letter-spacing: .04em; padding: 2px 5px; border-radius: 4px; background: #ffffff2e; }
+
+  /* Save options */
+  #savemenu {
+    inset: auto; margin: 6px 0 0; position-area: bottom span-left; position-anchor: --save;
+    width: 236px; padding: 10px; border: 1px solid var(--line); border-radius: 12px;
+    color: var(--text); background: var(--solid); box-shadow: var(--shadow);
+    opacity: 0; translate: 0 -6px; transition: opacity .15s, translate .15s var(--ease), display .15s allow-discrete, overlay .15s allow-discrete;
+  }
+  #savemenu:popover-open { opacity: 1; translate: 0 0; }
+  @starting-style { #savemenu:popover-open { opacity: 0; translate: 0 -6px; } }
+  .split { anchor-name: --save; }
+  .field { display: grid; gap: 6px; margin-bottom: 10px; }
+  .field > span { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+  .radios { display: flex; padding: 3px; border-radius: 8px; background: var(--hover); }
+  .radios label { flex: 1; }
+  .radios input { position: absolute; opacity: 0; pointer-events: none; }
+  .radios span { display: block; padding: 6px 0; border-radius: 6px; text-align: center; font-weight: 600; cursor: pointer; transition: background-color .12s, box-shadow .12s; }
+  .radios span:hover { background: var(--hover); }
+  .radios input:checked + span { background: var(--solid); box-shadow: 0 1px 3px #0003; color: var(--accent); }
+  #savemenu hr { margin: 2px -10px 6px; border: 0; border-top: 1px solid var(--line); }
+  .item { width: 100%; justify-content: flex-start; gap: 10px; }
+  .item kbd { margin-left: auto; }
+
+  /* Bottom: contextual style dock (centered) and zoom (right) */
+  #bottom {
+    position: fixed; left: 16px; right: 16px; bottom: 14px; z-index: 2; pointer-events: none;
+    display: grid; grid-template-columns: 1fr auto minmax(max-content, 1fr); align-items: end; gap: 12px;
+  }
+  .pill {
+    display: flex; align-items: center; gap: 2px; padding: 5px; border: 1px solid var(--line); border-radius: 14px;
+    background: var(--surface); backdrop-filter: blur(16px) saturate(1.4); box-shadow: var(--shadow); pointer-events: auto;
+  }
+  #props { grid-column: 2; gap: 14px; padding: 5px 8px; transition: opacity .18s, translate .22s var(--ease); }
+  #props[data-k=""] { opacity: 0; translate: 0 12px; pointer-events: none; }
+  #props .g { display: none; align-items: center; gap: 2px; }
+  #props[data-k~=c] .g-c, #props[data-k~=w] .g-w, #props[data-k~=f] .g-f, #props[data-k~=s] .g-s, #props[data-k~=d] .g-d { display: flex; }
+  body:has(#stage.cropping) #props { opacity: 1; translate: 0 0; pointer-events: auto; }
+  body:has(#stage.cropping) #props .g { display: none; }
+  body:has(#stage.cropping) #props .g-crop { display: flex; gap: 6px; }
+  .hint { padding: 0 6px 0 4px; color: var(--muted); }
+  #zoombar { grid-column: 3; justify-self: end; }
+  #zoom { min-width: 52px; font-variant-numeric: tabular-nums; font-weight: 600; }
+  [data-c] { min-width: 30px; width: 30px; padding: 0; }
+  [data-c]::before {
+    content: ""; width: 20px; height: 20px; border-radius: 50%; background: var(--c);
+    box-shadow: inset 0 0 0 1px light-dark(#0000002e, #ffffff40); transition: box-shadow .15s, scale .15s var(--ease);
+  }
+  [data-c][aria-pressed=true]::before { box-shadow: inset 0 0 0 1px #0003, 0 0 0 2px var(--solid), 0 0 0 4px var(--accent); scale: .9; }
+  [data-w] i { display: block; width: 18px; border-radius: 2px; background: currentColor; }
+  [data-del]:hover:not(:disabled) { color: var(--danger); background: color-mix(in srgb, var(--danger) 12%, transparent); }
+  #tsize { min-width: 24px; text-align: center; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .aa { font-weight: 700; }
+
+  /* Status toast */
+  #status {
+    position: fixed; left: 50%; bottom: 76px; z-index: 3; translate: -50% 0; max-width: calc(100vw - 48px);
+    padding: 8px 14px; border-radius: 999px; font-weight: 600; color: var(--solid); background: var(--text); box-shadow: var(--shadow);
+    transition: opacity .2s, translate .25s var(--ease); cursor: default;
+  }
+  #status:empty, #status.off { opacity: 0; translate: -50% 8px; pointer-events: none; }
+
+  /* Stage */
+  #stage {
+    position: relative; width: fit-content; margin: 16px auto; touch-action: none; user-select: none; cursor: crosshair;
+    box-shadow: 0 0 0 1px var(--line), 0 2px 6px #0000001f, 0 12px 40px light-dark(#00000024, #00000080);
+  }
   #shot { display: block; pointer-events: none; } /* never the target: Chrome's image menu and drag-out would hand over the unredacted capture */
-  #stage.cropping { overflow: clip; cursor: crosshair; touch-action: none; user-select: none; }
-  #stage.marking { cursor: crosshair; touch-action: none; user-select: none; }
-  #stage.marking[data-tool=select] { cursor: default; }
-  #stage.marking[data-tool=text] { cursor: text; }
-  #ink { position: absolute; inset: 0; pointer-events: none; }
+  #stage[data-tool=select] { cursor: default; }
+  #stage[data-tool=text] { cursor: text; }
+  #stage.cropping { overflow: clip; cursor: crosshair; }
+  #ink { position: absolute; inset: 0; }
+  #stage.cropping #ink { pointer-events: none; }
   #ink svg { display: block; width: 100%; height: 100%; }
-  #stage.marking #ink { pointer-events: auto; }
   .box { position: absolute; }
-  .box i { position: absolute; width: 10px; height: 10px; background: #fff; border: 1px solid #000; cursor: move; }
+  .box i { position: absolute; width: 12px; height: 12px; box-sizing: border-box; border-radius: 3px; background: #fff; border: 1.5px solid var(--accent); box-shadow: 0 1px 3px #0005; cursor: move; }
   .box [data-h*=n] { top: 0; } .box [data-h*=s] { bottom: 0; } .box [data-h*=w] { left: 0; } .box [data-h*=e] { right: 0; }
   .box [data-h=n], .box [data-h=s] { left: calc(50% - 6px); cursor: ns-resize; }
   .box [data-h=e], .box [data-h=w] { top: calc(50% - 6px); cursor: ew-resize; }
   .box [data-h=nw], .box [data-h=se] { cursor: nwse-resize; }
   .box [data-h=ne], .box [data-h=sw] { cursor: nesw-resize; }
-  #sel { outline: 1px dashed #fff; box-shadow: 0 0 0 1000000px #0008; /* 100vmax fell short: a 32767px capture at 8x zoom is ~262000px */ cursor: move; }
-  #pick { outline: 1px dashed #1e88e5; pointer-events: none; }
+  #sel { outline: 1.5px solid #fff; box-shadow: 0 0 0 1000000px #000000a0; /* 100vmax fell short: a 32767px capture at 8x zoom is ~262000px */ cursor: move; }
+  #sel i { border-color: #fff; background: #fff; }
+  #pick { outline: 1.5px solid var(--accent); pointer-events: none; }
   #pick.ends { outline: none; }
   #pick i { pointer-events: auto; }
+  #pick [data-h="0"], #pick [data-h="1"], #pick [data-h=tip] { border-radius: 50%; }
   /* Outside the shape, so a small one (Fit zoom) can still be grabbed inside to move it. */
   #pick [data-h*=n] { top: -12px; } #pick [data-h*=s] { bottom: -12px; } #pick [data-h*=w] { left: -12px; } #pick [data-h*=e] { right: -12px; }
-  #edit { position: absolute; margin: 0; padding: 0; border: 0; outline: 1px dashed #1e88e5; background: #fffc; resize: none; overflow: hidden; white-space: pre; field-sizing: content; min-width: 2ch; }
-  #tools { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
-  #tools[hidden] { display: none; }
-  #tools button { padding: 4px 10px; min-width: 34px; }
-  #tools button svg { display: block; width: 16px; height: 16px; margin: 0 auto; }
-  #tools .sep { width: 12px; }
-  #tsize { min-width: 2em; text-align: center; font-variant-numeric: tabular-nums; }
-  #tools [data-c] { width: 26px; min-width: 0; height: 26px; padding: 0; border-radius: 50%; border: 1px solid light-dark(#0006, #fff8); background: var(--c); }
-  #tools [data-w] i { display: block; width: 18px; background: currentColor; }
-  header [aria-pressed=true] { outline: 2px solid #1e88e5; outline-offset: 1px; }
+  #edit { position: absolute; margin: 0; padding: 0; border: 0; outline: 1.5px solid var(--accent); border-radius: 2px; background: #fffc; resize: none; overflow: hidden; white-space: pre; field-sizing: content; min-width: 2ch; user-select: text; }
   #printshot { display: none; }
   @media print {
-    header, #sel, #pick, #edit { display: none; }
+    header, #bottom, #status, #savemenu, #sel, #pick, #edit { display: none !important; }
     body { background: none; padding: 0 !important; }
     #stage { margin: 0; box-shadow: none; }
     #shot, #printshot { width: var(--actual, auto) !important; max-width: 100%; }
@@ -51,66 +177,127 @@
     .burned #printshot { display: block; }
   }
 </style>
-<header>
-  <select id="format" aria-label="Format">
-    <option value="png">PNG</option>
-    <option value="jpg">JPG</option>
-    <option value="pdf">PDF</option>
-  </select>
-  <select id="quality" aria-label="Quality">
-    <option value="0.92">High</option>
-    <option value="0.8">Medium</option>
-    <option value="0.6">Low</option>
-  </select>
-  <button data-act="save" title="Save (Ctrl+S)">Save…</button>
-  <button data-act="copy" title="Copy as PNG (Ctrl+C)">Copy</button>
-  <button data-act="print" title="Print (Ctrl+P)">Print</button>
-  <button id="crop" title="Drag over the capture to pick the area to keep (Enter applies, Esc cancels)">Crop</button>
-  <button id="uncrop" hidden>Undo crop</button>
-  <button id="markup" aria-pressed="false" title="Draw on the capture">Markup</button>
-  <span id="status" role="status"></span>
-  <span id="zoombar">
-    <button data-zoom="fit" title="Whole capture in the window">Fit</button>
-    <button data-zoom="width" title="Fit the width and scroll down">Fit width</button>
-    <button data-zoom="out" aria-label="Zoom out">−</button>
-    <span id="zoom"></span>
-    <button data-zoom="in" aria-label="Zoom in">+</button>
-  </span>
-  <div id="tools" hidden>
-    <button data-tool="select" title="Select (Esc; Esc again closes): drag to move, handles resize, double-click text to edit, Del deletes">↖</button>
-    <button data-tool="hl" title="Highlighter (Shift: straight line, snapped to 45°)"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g transform="rotate(40 12 11)"><rect x="9" y="1" width="6" height="11" rx="1.5"/><path d="M9 13h6l-1 3h-4z"/><path d="M10.5 17h3v2.5l-3 1.5z"/></g><rect x="3" y="20.5" width="18" height="2.5" rx="1" opacity=".45"/></svg></button>
-    <button data-tool="pen" title="Pen (Shift: straight line, snapped to 45°)">✎</button>
-    <button data-tool="line" title="Line (Shift: snap to 45°)">╱</button>
-    <button data-tool="arrow" title="Arrow (Shift: snap to 45°)">→</button>
-    <button data-tool="rect" title="Rectangle (Shift: square)">▭</button>
-    <button data-tool="ellipse" title="Ellipse (Shift: circle)">◯</button>
-    <button data-tool="cloud" title="Cloud">☁</button>
-    <button data-tool="text" title="Text: click to place, click away or Esc to finish">T</button>
-    <button data-tool="callout" title="Callout: drag from the point to where the text goes">💬</button>
-    <span class="sep"></span>
-    <button data-c="#e53935" style="--c:#e53935" aria-label="Red"></button>
-    <button data-c="#fb8c00" style="--c:#fb8c00" aria-label="Orange"></button>
-    <button data-c="#fdd835" style="--c:#fdd835" aria-label="Yellow"></button>
-    <button data-c="#43a047" style="--c:#43a047" aria-label="Green"></button>
-    <button data-c="#1e88e5" style="--c:#1e88e5" aria-label="Blue"></button>
-    <button data-c="#000000" style="--c:#000000" aria-label="Black"></button>
-    <button data-c="#ffffff" style="--c:#ffffff" aria-label="White"></button>
-    <span class="sep"></span>
-    <button data-w="2" aria-label="Thin"><i style="height:2px"></i></button>
-    <button data-w="4" aria-label="Medium"><i style="height:4px"></i></button>
-    <button data-w="8" aria-label="Thick"><i style="height:8px"></i></button>
-    <span class="sep"></span>
-    <button data-fill title="Fill rectangles, ellipses and clouds (a black box redacts)">◼</button>
-    <span class="sep"></span>
-    <button data-size="-1" aria-label="Smaller text">A−</button>
-    <span id="tsize" title="Text size"></span>
-    <button data-size="1" aria-label="Larger text">A+</button>
-    <span class="sep"></span>
-    <button data-cmd="undo" title="Undo (Ctrl+Z)">↶</button>
-    <button data-cmd="redo" title="Redo (Ctrl+Y)">↷</button>
-    <button data-cmd="del" title="Delete (Del)">🗑</button>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-select" viewBox="0 0 24 24"><path d="M5.5 3.8 18.6 9.6a.5.5 0 0 1-.06.94l-5.4 1.5a1 1 0 0 0-.7.7l-1.5 5.4a.5.5 0 0 1-.94.06L4.2 5.1a1 1 0 0 1 1.3-1.3z"/></symbol>
+  <symbol id="i-hl" viewBox="0 0 24 24"><path d="m14.5 4.5 5 5-7.5 7.5H7v-5z"/><path d="M7 12l5 5"/><path d="M7 17l-2.5 2.5h5"/><path d="M4 21.5h16" stroke-width="2.5" opacity=".45"/></symbol>
+  <symbol id="i-pen" viewBox="0 0 24 24"><path d="M16.8 3.7a2.3 2.3 0 0 1 3.4 3.3L8 19.2l-4.3 1.1 1.1-4.3z"/><path d="m14.6 5.9 3.4 3.4"/></symbol>
+  <symbol id="i-line" viewBox="0 0 24 24"><path d="M5 19 19 5"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 19 18.5 5.5"/><path d="M9 5h10v10"/></symbol>
+  <symbol id="i-rect" viewBox="0 0 24 24"><rect x="3.5" y="5.5" width="17" height="13" rx="2"/></symbol>
+  <symbol id="i-ellipse" viewBox="0 0 24 24"><ellipse cx="12" cy="12" rx="8.8" ry="6.8"/></symbol>
+  <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M7.5 18.5a4 4 0 0 1-.7-7.94 5.5 5.5 0 0 1 10.6-1.5 4.75 4.75 0 0 1-.4 9.44z"/></symbol>
+  <symbol id="i-text" viewBox="0 0 24 24"><path d="M5 7V4.5h14V7"/><path d="M12 4.5v15"/><path d="M9 19.5h6"/></symbol>
+  <symbol id="i-callout" viewBox="0 0 24 24"><path d="M5.5 4h13A1.5 1.5 0 0 1 20 5.5v9a1.5 1.5 0 0 1-1.5 1.5H11l-5 4v-4h-.5A1.5 1.5 0 0 1 4 14.5v-9A1.5 1.5 0 0 1 5.5 4z"/><path d="M8 8.5h8M8 12h5"/></symbol>
+  <symbol id="i-crop" viewBox="0 0 24 24"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></symbol>
+  <symbol id="i-uncrop" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></symbol>
+  <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></symbol>
+  <symbol id="i-redo" viewBox="0 0 24 24"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8.5" y="8.5" width="12" height="12" rx="2"/><path d="M15.5 5.5V5a1.5 1.5 0 0 0-1.5-1.5H5A1.5 1.5 0 0 0 3.5 5v9A1.5 1.5 0 0 0 5 15.5h.5"/></symbol>
+  <symbol id="i-save" viewBox="0 0 24 24"><path d="M12 3.5v11"/><path d="m7 10 5 5 5-5"/><path d="M4.5 20.5h15"/></symbol>
+  <symbol id="i-print" viewBox="0 0 24 24"><path d="M6.5 9V3.5h11V9"/><path d="M6.5 17.5h-2a1.5 1.5 0 0 1-1.5-1.5v-5.5A1.5 1.5 0 0 1 4.5 9h15a1.5 1.5 0 0 1 1.5 1.5V16a1.5 1.5 0 0 1-1.5 1.5h-2"/><path d="M6.5 14h11v6.5h-11z"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="m6 9.5 6 6 6-6"/></symbol>
+  <symbol id="i-fill" viewBox="0 0 24 24"><rect x="4" y="5.5" width="16" height="13" rx="2" fill="currentColor" fill-opacity=".35"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 6.5h16"/><path d="M9 6.5V4h6v2.5"/><path d="M6 6.5l1 12.5a2 2 0 0 0 2 1.5h6a2 2 0 0 0 2-1.5l1-12.5"/><path d="M10 11v5.5M14 11v5.5"/></symbol>
+  <symbol id="i-fit" viewBox="0 0 24 24"><path d="M4 9V5a1 1 0 0 1 1-1h4M15 4h4a1 1 0 0 1 1 1v4M20 15v4a1 1 0 0 1-1 1h-4M9 20H5a1 1 0 0 1-1-1v-4"/></symbol>
+  <symbol id="i-width" viewBox="0 0 24 24"><path d="M3.5 12h17"/><path d="m7 8.5-3.5 3.5L7 15.5M17 8.5l3.5 3.5-3.5 3.5"/></symbol>
+  <symbol id="i-minus" viewBox="0 0 24 24"><path d="M6 12h12"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 6v12M6 12h12"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+</svg>
+
+<header id="tools">
+  <div class="seg">
+    <button data-tool="select" data-key="V" aria-label="Select" data-tip=" · V&#10;Drag to move, handles resize, double-click text to edit, Del deletes" class="tip-l"><svg class="i"><use href="#i-select"/></svg></button>
+    <button data-tool="hl" data-key="H" aria-label="Highlighter" data-tip=" · H&#10;Shift: straight, snapped to 45°"><svg class="i"><use href="#i-hl"/></svg></button>
+    <button data-tool="pen" data-key="P" aria-label="Pen" data-tip=" · P&#10;Shift: straight, snapped to 45°"><svg class="i"><use href="#i-pen"/></svg></button>
+    <button data-tool="line" data-key="L" aria-label="Line" data-tip=" · L&#10;Shift: snap to 45°"><svg class="i"><use href="#i-line"/></svg></button>
+    <button data-tool="arrow" data-key="A" aria-label="Arrow" data-tip=" · A&#10;Shift: snap to 45°"><svg class="i"><use href="#i-arrow"/></svg></button>
+    <button data-tool="rect" data-key="R" aria-label="Rectangle" data-tip=" · R&#10;Shift: square. Filled black redacts."><svg class="i"><use href="#i-rect"/></svg></button>
+    <button data-tool="ellipse" data-key="E" aria-label="Ellipse" data-tip=" · E&#10;Shift: circle"><svg class="i"><use href="#i-ellipse"/></svg></button>
+    <button data-tool="cloud" data-key="C" aria-label="Cloud" data-tip=" · C"><svg class="i"><use href="#i-cloud"/></svg></button>
+    <button data-tool="text" data-key="T" aria-label="Text" data-tip=" · T&#10;Click to place; click away or Esc to finish"><svg class="i"><use href="#i-text"/></svg></button>
+    <button data-tool="callout" data-key="B" aria-label="Callout" data-tip=" · B&#10;Drag from the point to where the text goes"><svg class="i"><use href="#i-callout"/></svg></button>
+  </div>
+  <span class="sep"></span>
+  <button id="crop" data-key="X" aria-pressed="false" aria-label="Crop" data-tip=" · X&#10;Drag to pick the area to keep; Enter applies, Esc cancels"><svg class="i"><use href="#i-crop"/></svg></button>
+  <button id="uncrop" hidden aria-label="Undo crop" data-tip="&#10;Back to the full capture"><svg class="i"><use href="#i-uncrop"/></svg></button>
+  <span class="grow"></span>
+  <button data-cmd="undo" aria-label="Undo" data-tip=" · Ctrl+Z"><svg class="i"><use href="#i-undo"/></svg></button>
+  <button data-cmd="redo" aria-label="Redo" data-tip=" · Ctrl+Y"><svg class="i"><use href="#i-redo"/></svg></button>
+  <span class="sep"></span>
+  <button class="btn" data-act="copy" aria-label="Copy" data-tip=" as PNG · Ctrl+C&#10;Markup included" ><svg class="i"><use href="#i-copy"/></svg><span>Copy</span></button>
+  <div class="split">
+    <button class="btn primary tip-r" data-act="save" aria-label="Save" data-tip=" · Ctrl+S"><svg class="i"><use href="#i-save"/></svg><span>Save</span><span id="fmtlabel">PNG</span></button>
+    <button class="primary tip-r" popovertarget="savemenu" aria-label="Format, quality and Print" data-tip=""><svg class="i"><use href="#i-down"/></svg></button>
   </div>
 </header>
-<div id="stage"><img id="shot" alt="Screenshot"><div id="ink"></div><div id="sel" class="box" hidden><i data-h="nw"></i><i data-h="n"></i><i data-h="ne"></i><i data-h="e"></i><i data-h="se"></i><i data-h="s"></i><i data-h="sw"></i><i data-h="w"></i></div><div id="pick" class="box" hidden><i data-h="nw"></i><i data-h="n"></i><i data-h="ne"></i><i data-h="e"></i><i data-h="se"></i><i data-h="s"></i><i data-h="sw"></i><i data-h="w"></i><i data-h="0"></i><i data-h="1"></i><i data-h="tip"></i></div><textarea id="edit" hidden spellcheck="false"></textarea></div>
+
+<div id="savemenu" popover>
+  <form id="saveopts">
+    <div class="field"><span>Format</span>
+      <div class="radios">
+        <label><input type="radio" name="format" value="png" checked><span>PNG</span></label>
+        <label><input type="radio" name="format" value="jpg"><span>JPG</span></label>
+        <label><input type="radio" name="format" value="pdf"><span>PDF</span></label>
+      </div>
+    </div>
+    <div class="field" id="qfield"><span>Quality</span>
+      <div class="radios">
+        <label><input type="radio" name="quality" value="0.92" checked><span>High</span></label>
+        <label><input type="radio" name="quality" value="0.8"><span>Medium</span></label>
+        <label><input type="radio" name="quality" value="0.6"><span>Low</span></label>
+      </div>
+    </div>
+  </form>
+  <hr>
+  <button class="item" data-act="print" popovertarget="savemenu" popovertargetaction="hide"><svg class="i"><use href="#i-print"/></svg><span>Print…</span><kbd>Ctrl+P</kbd></button>
+</div>
+
+<div id="bottom">
+  <div id="props" class="pill" data-k="">
+    <div class="g g-crop">
+      <span class="hint">Drag to choose the area to keep</span>
+      <button id="cropcancel" class="btn">Cancel <kbd>Esc</kbd></button>
+      <button id="cropapply" class="btn primary"><svg class="i"><use href="#i-check"/></svg>Apply <kbd>Enter</kbd></button>
+    </div>
+    <div class="g g-c">
+      <button data-c="#e53935" style="--c:#e53935" aria-label="Red" data-tip="" class="tip-up"></button>
+      <button data-c="#fb8c00" style="--c:#fb8c00" aria-label="Orange" data-tip="" class="tip-up"></button>
+      <button data-c="#fdd835" style="--c:#fdd835" aria-label="Yellow" data-tip="" class="tip-up"></button>
+      <button data-c="#43a047" style="--c:#43a047" aria-label="Green" data-tip="" class="tip-up"></button>
+      <button data-c="#1e88e5" style="--c:#1e88e5" aria-label="Blue" data-tip="" class="tip-up"></button>
+      <button data-c="#000000" style="--c:#000000" aria-label="Black" data-tip="" class="tip-up"></button>
+      <button data-c="#ffffff" style="--c:#ffffff" aria-label="White" data-tip="" class="tip-up"></button>
+    </div>
+    <div class="g g-w">
+      <button data-w="2" aria-label="Thin" data-tip="" class="tip-up"><i style="height:2px"></i></button>
+      <button data-w="4" aria-label="Medium" data-tip="" class="tip-up"><i style="height:4px"></i></button>
+      <button data-w="8" aria-label="Thick" data-tip="" class="tip-up"><i style="height:7px"></i></button>
+    </div>
+    <div class="g g-f">
+      <button data-fill aria-label="Fill" data-tip="&#10;A filled black box redacts what's under it" class="tip-up"><svg class="i"><use href="#i-fill"/></svg></button>
+    </div>
+    <div class="g g-s">
+      <button data-size="-1" aria-label="Smaller text" data-tip="" class="tip-up aa" style="font-size:11px">A</button>
+      <span id="tsize"></span>
+      <button data-size="1" aria-label="Larger text" data-tip="" class="tip-up aa" style="font-size:16px">A</button>
+    </div>
+    <div class="g g-d">
+      <button data-cmd="del" data-del aria-label="Delete" data-tip=" · Del" class="tip-up"><svg class="i"><use href="#i-trash"/></svg></button>
+    </div>
+  </div>
+  <div id="zoombar" class="pill">
+    <button data-zoom="out" aria-label="Zoom out" data-tip=" · Ctrl+wheel" class="tip-up"><svg class="i"><use href="#i-minus"/></svg></button>
+    <button id="zoom" data-zoom="1" aria-label="Actual size" data-tip="" class="tip-up"></button>
+    <button data-zoom="in" aria-label="Zoom in" data-tip=" · Ctrl+wheel" class="tip-up"><svg class="i"><use href="#i-plus"/></svg></button>
+    <span class="sep"></span>
+    <button data-zoom="fit" aria-label="Fit" data-tip="&#10;Whole capture in the window" class="tip-up tip-r"><svg class="i"><use href="#i-fit"/></svg></button>
+    <button data-zoom="width" aria-label="Fit width" data-tip="&#10;Fill the width and scroll down" class="tip-up tip-r"><svg class="i"><use href="#i-width"/></svg></button>
+  </div>
+</div>
+<div id="status" role="status"></div>
+
+<div id="stage" data-tool="select"><img id="shot" alt="Screenshot"><div id="ink"></div><div id="sel" class="box" hidden><i data-h="nw"></i><i data-h="n"></i><i data-h="ne"></i><i data-h="e"></i><i data-h="se"></i><i data-h="s"></i><i data-h="sw"></i><i data-h="w"></i></div><div id="pick" class="box" hidden><i data-h="nw"></i><i data-h="n"></i><i data-h="ne"></i><i data-h="e"></i><i data-h="se"></i><i data-h="s"></i><i data-h="sw"></i><i data-h="w"></i><i data-h="0"></i><i data-h="1"></i><i data-h="tip"></i></div><textarea id="edit" hidden spellcheck="false"></textarea></div>
 <img id="printshot" alt="">
 <script type="module" src="editor.js"></script>

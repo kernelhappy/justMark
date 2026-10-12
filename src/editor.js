@@ -17,22 +17,30 @@ let png = await invoke('shot').then(async buf => {
 }).catch(e => { $('status').textContent = `Can't open this image: ${e.message ?? e}`; });
 document.title = name;
 if (png) $('shot').src = URL.createObjectURL(png);
-else for (const el of document.querySelectorAll('header button, header select')) el.disabled = true;
+else for (const el of document.querySelectorAll('button, input')) el.disabled = true;
 
-// Format and quality start as last picked; quality only applies to JPG and PDF.
-const showQuality = () => { $('quality').hidden = $('format').value === 'png'; };
-for (const el of [$('format'), $('quality')]) {
-  if (localStorage[el.id]) el.value = localStorage[el.id];
-  if (el.selectedIndex < 0) el.selectedIndex = 0;
-  el.onchange = () => { localStorage[el.id] = el.value; showQuality(); };
-}
-showQuality();
+// Format and quality (Save's menu) start as last picked; quality only applies to JPG and PDF. An unknown stored value leaves the default checked.
+const opts = $('saveopts').elements;
+const showOpts = () => { $('qfield').hidden = opts.format.value === 'png'; $('fmtlabel').textContent = opts.format.value.toUpperCase(); };
+for (const n of ['format', 'quality']) if (localStorage[n]) opts[n].value = localStorage[n];
+$('saveopts').onchange = ({ target }) => { localStorage[target.name] = target.value; showOpts(); };
+showOpts();
+
+// Status is a toast: Saved/Copied fade on their own, "Working…" and errors stay until replaced or clicked.
+const status = $('status');
+let toast;
+new MutationObserver(() => {
+  clearTimeout(toast);
+  status.classList.remove('off');
+  if (/^(Saved|Copied)/.test(status.textContent)) toast = setTimeout(() => status.classList.add('off'), 2500);
+}).observe(status, { childList: true });
+status.onclick = () => status.classList.add('off');
 
 async function encode(fmt) {
   // Snapshot now: a crop or undo landing mid-encode must not pair this image with another offset (filled boxes redact).
   const png0 = png, o = off, sh = shapes.slice();
   if (fmt === 'png' && !sh.length) return png0;
-  const quality = +$('quality').value;
+  const quality = +opts.quality.value;
   const img = await createImageBitmap(png0), c = new OffscreenCanvas(img.width, img.height), ctx = c.getContext('2d', { willReadFrequently: true });
   ctx.drawImage(img, 0, 0);
   if (sh.length) {
@@ -83,7 +91,7 @@ async function run(key) {
   busy = true;
   $('status').textContent = 'Working…';
   try {
-    const at = state(), msg = await act($('format').value);
+    const at = state(), msg = await act(opts.format.value);
     $('status').textContent = msg;
     if (msg) saved = at; // Save or Copy went through; a cancelled picker or Print says nothing
   } catch (e) {
@@ -105,7 +113,7 @@ function applyZoom() {
   if (!w) return;
   const cw = document.documentElement.clientWidth, fitW = Math.min(1, (cw - 32) / w);
   // A window smaller than the chrome would give a zero or negative fit; floor it at the zoom-out limit.
-  scale = Math.max(0.05, zoom === 'fit' ? Math.min(fitW, (innerHeight - header.offsetHeight - 32) / h) : zoom === 'width' ? fitW : zoom);
+  scale = Math.max(0.05, zoom === 'fit' ? Math.min(fitW, (innerHeight - header.offsetHeight - 104) / h) : zoom === 'width' ? fitW : zoom);
   shot.style.width = w * scale + 'px';
   document.body.style.setProperty('--actual', w + 'px'); // print at Actual size, not one CSS px per image pixel
   // Fit can drop the old layout's vertical scrollbar, which fires no resize: measure again without it (only on widening, so it can't loop).
@@ -116,7 +124,8 @@ function applyZoom() {
 // While a crop or Undo crop swaps the image, gestures wait: until it loads, the old image's geometry would meet the new offset.
 let swapping = false, shown = false;
 // The window starts hidden; Rust sizes it to what the page asks for (CSS px, capped to the screen) and shows it.
-const show = (w, h) => shown || (shown = true, invoke('ready', { width: Math.max(1100, w + 48), height: header.offsetHeight + h + 48 }));
+// 960 wide keeps the top bar on one row and the style dock clear of the zoom pill; 104/120 is the room the dock takes below.
+const show = (w, h) => shown || (shown = true, invoke('ready', { width: Math.max(960, w + 48), height: Math.max(480, header.offsetHeight + h + 120) }));
 shot.onload = () => {
   swapping = false;
   applyZoom();
@@ -147,7 +156,7 @@ addEventListener('wheel', e => {
 }, { passive: false });
 
 const stage = $('stage'), sel = $('sel'), pickBox = $('pick'), edit = $('edit'), ink = $('ink');
-const cropping = () => stage.classList.contains('cropping'), marking = () => stage.classList.contains('marking');
+const cropping = () => stage.classList.contains('cropping');
 // Pointer position in pixels of the current image; the rect is re-read on every move so scrolling mid-drag still lines up.
 const at = ev => { const r = shot.getBoundingClientRect(), f = shot.naturalWidth / r.width; return [(ev.clientX - r.left) * f, (ev.clientY - r.top) * f]; };
 // Percentages keep boxes in place when the zoom changes. o: where the current image starts in b's coordinates.
@@ -171,8 +180,7 @@ function endCrop() {
   stage.classList.remove('cropping');
   sel.hidden = true;
   box = null;
-  $('crop').textContent = 'Crop';
-  $('status').textContent = '';
+  $('crop').setAttribute('aria-pressed', false);
 }
 // Leaves crop mode before the first await, so a repeat click or Enter can't apply twice and Esc has nothing left to cancel;
 // the new image and its offset are taken from one snapshot and set together.
@@ -195,13 +203,17 @@ async function applyCrop() {
     if (png === src) swapping = false; // failed: no new image is coming
   }
 }
+// The style dock turns into the crop bar (hint, Cancel, Apply) while cropping; see index.html.
 $('crop').onclick = () => {
   if (cropping()) return applyCrop();
-  setMarking(false);
+  finishEdit();
+  cur = null;
+  render();
   stage.classList.add('cropping');
-  $('crop').textContent = 'Apply crop';
-  $('status').textContent = 'Drag over the capture, then adjust with the handles. Enter applies, Esc cancels.';
+  $('crop').setAttribute('aria-pressed', true);
 };
+$('cropapply').onclick = applyCrop;
+$('cropcancel').onclick = endCrop;
 $('uncrop').onclick = () => { if (cropping()) endCrop(); const o = original; original = null; off = { x: 0, y: 0 }; setShot(o); };
 function cropDown(e) {
   const W = shot.naturalWidth, H = shot.naturalHeight, [x0, y0] = at(e);
@@ -230,6 +242,8 @@ function syncDpr() {
   for (const s of [style.pen, style.hl]) for (const k of ['w', 'size']) if (k in s) s[k] = Math.round(s[k] / dpr) * devicePixelRatio;
   dpr = devicePixelRatio;
 }
+// What the style dock offers per shape type or tool (see render).
+const KINDS = { select: '', hl: 'c w', pen: 'c w', line: 'c w', arrow: 'c w', rect: 'c w f', ellipse: 'c w f', cloud: 'c w f', text: 'c s', callout: 'c w s' };
 let shapes = [], hist = ['[]'], step = 0, off = { x: 0, y: 0 }, tool = 'select', cur = null, editing = null, lastDown = 0, gesture = false;
 const style = { pen: { c: '#e53935', w: 4 * dpr, size: 20 * dpr, fill: false }, hl: { c: '#fdd835', w: 4 * dpr } };
 const styleOf = type => type === 'hl' ? style.hl : style.pen;
@@ -260,11 +274,13 @@ function render() {
     Object.assign(edit.style, { left: (s.x + p - off.x) / W * 100 + '%', top: (s.y + p - off.y) / shot.naturalHeight * 100 + '%', font: `600 ${s.size * k}px/${LH} system-ui, sans-serif`, color: s.tip ? '#111' : s.c, background: s.tip || !['#ffffff', '#fdd835'].includes(s.c) ? '' : '#000c' });
   }
   const now = s ?? styleOf(tool);
-  for (const b of $('tools').querySelectorAll('button')) {
+  for (const b of document.querySelectorAll('[data-tool], [data-c], [data-w], [data-fill], [data-cmd]')) {
     const d = b.dataset;
     if (d.cmd) b.disabled = d.cmd === 'undo' ? !step : d.cmd === 'redo' ? step === hist.length - 1 : !s;
-    else if (!d.size) b.setAttribute('aria-pressed', d.tool ? d.tool === tool : d.c ? d.c === now.c : d.w ? d.w * dpr === now.w : filled(s));
+    else b.setAttribute('aria-pressed', d.tool ? d.tool === tool : d.c ? d.c === now.c : d.w ? d.w * dpr === now.w : filled(s));
   }
+  // The dock shows only what applies to the selected shape, else to the tool: c(olor) w(idth) f(ill) s(ize) d(elete). Empty hides it.
+  $('props').dataset.k = (KINDS[s?.type ?? tool] + (s ? ' d' : '')).trim();
   $('tsize').textContent = Math.round((s?.size ?? style.pen.size) / dpr);
 }
 function commit() {
@@ -288,23 +304,11 @@ function remove() {
   cur = null;
   commit();
 }
-function setMarking(on) {
-  finishEdit();
-  if (on && cropping()) endCrop();
-  stage.classList.toggle('marking', on);
-  $('tools').hidden = !on;
-  $('markup').setAttribute('aria-pressed', on);
-  if (!on) cur = null;
-  applyZoom(); // the second toolbar row changes the room left for Fit
-}
-$('markup').onclick = () => setMarking(!marking());
-setMarking(true); // marking up is what the window opened for
 // No browser menu (Back, Reload, Save as…); the text editor keeps its cut/copy/paste menu.
 oncontextmenu = e => e.target === edit || e.preventDefault();
-stage.dataset.tool = tool;
 // A press must not blur an open text editor: finishEdit would delete an empty new text before the click lands.
-$('tools').onmousedown = e => e.preventDefault();
-$('tools').onclick = ({ target }) => {
+$('tools').onmousedown = $('props').onmousedown = e => e.preventDefault();
+$('tools').onclick = $('props').onclick = ({ target }) => {
   if (gesture) return;
   const d = target.closest('button')?.dataset ?? {}, s = shapes[cur];
   // Tool, Undo, Redo and Delete end an open edit first; on an empty new text that just cancels it, so Undo doesn't also undo the last commit.
@@ -314,6 +318,7 @@ $('tools').onclick = ({ target }) => {
     if (empty && d.cmd) return render();
   }
   if (d.tool) {
+    if (cropping()) endCrop();
     tool = stage.dataset.tool = d.tool;
     cur = null;
   } else if (d.cmd) ({ undo: () => go(-1), redo: () => go(1), del: remove })[d.cmd]();
@@ -454,7 +459,7 @@ function markDown(e) {
 // One gesture at a time: while a drag holds the pointer, other pointers and the editing keys wait, since its handlers hold a fixed shape index.
 // Losing the capture (release, pointercancel) ends the gesture as a release would, so hover can't keep drawing.
 stage.onpointerdown = e => {
-  if (gesture || swapping || e.button || !(cropping() || marking()) || e.target === edit) return;
+  if (gesture || swapping || e.button || e.target === edit) return;
   if (editing != null) return finishEdit();
   e.preventDefault(); // which also keeps focus where it was, so drop it from the toolbar: a focus ring there looks like the active tool
   document.activeElement.blur();
@@ -491,13 +496,17 @@ onkeydown = e => {
   } else if ((e.ctrlKey || e.metaKey) && (k === 's' || k === 'c')) {
     e.preventDefault();
     run(k === 's' ? 'save' : 'copy');
-  } else if (marking() && (e.key === 'Delete' || e.key === 'Backspace') && e.target.tagName !== 'SELECT') remove();
+  } else if ((e.key === 'Delete' || e.key === 'Backspace') && e.target.tagName !== 'INPUT') remove();
   else if (e.key === 'Escape') {
+    if (document.querySelector(':popover-open')) return; // the Save menu closes itself
     // Esc steps back to Select, then closes the editor (the snip is already on the clipboard).
-    if (!marking() || (tool === 'select' && cur == null)) return closeEditor();
+    if (tool === 'select' && cur == null) return closeEditor();
     cur = null;
     tool = stage.dataset.tool = 'select';
     render();
+  } else if (/^[a-z]$/i.test(e.key) && !e.ctrlKey && !e.metaKey && !e.altKey && e.target.tagName !== 'INPUT') {
+    // Single-letter tool keys: the button's data-key (shown in its tooltip) is the binding.
+    document.querySelector(`[data-key="${e.key.toUpperCase()}"]`)?.click();
   }
 };
 

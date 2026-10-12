@@ -18,3 +18,8 @@
   is a rename there, so the watcher (creations only) doesn't reopen it.
 - **2026-10-12 — No "Open file…" tray item.** "Open with" + file association covers it.
 - **2026-10-12 — Identifier `io.github.snarkymark`** (working name; change before any release).
+- **2026-10-12 — UI redesign: top bar + contextual floating dock + zoom pill** (handsoff; user to review).
+  Rejected: left tool rail (three surfaces to scan), keeping the 2-row header (everything always visible,
+  most of it irrelevant to the current tool). Markup toggle dropped: the window only exists to mark up.
+  Format/Quality/Print moved into Save's menu (set once, rarely changed). Select stays the default tool so
+  "snip, paste, Esc" is still one Esc.

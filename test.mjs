@@ -82,15 +82,16 @@ for (const [active, ends] of [['edit', false], ['body', true]]) {
   click();
   assert.strictEqual(style.pen.fill, false, 'second Fill click turns the default fill off');
 }
-// Delete/Backspace on the Format or Quality <select> must not delete the selected shape.
+// Delete/Backspace on the Format or Quality radios must not delete the selected shape.
+globalThis.document = { querySelector: () => null }; // no Save menu open
 {
   const src = (await import('node:fs')).readFileSync('./src/editor.js', 'utf8');
   let removed = 0;
   const f = new Function('run', 'finishEdit', 'cropping', 'marking', 'remove', 'edit', 'go', 'render', 'stage', `let gesture = false, cur = 0, tool = 'select', onkeydown; ${src.match(/onkeydown = e => \{[\s\S]*?\n\};/)[0]} return onkeydown;`)(
     () => {}, () => {}, () => false, () => true, () => { removed++; }, {}, () => {}, () => {}, { dataset: {} });
-  f({ key: 'Delete', target: { tagName: 'SELECT' } });
-  f({ key: 'Backspace', target: { tagName: 'SELECT' } });
-  assert.strictEqual(removed, 0, 'Delete on a <select> removed the shape');
+  f({ key: 'Delete', target: { tagName: 'INPUT' } });
+  f({ key: 'Backspace', target: { tagName: 'INPUT' } });
+  assert.strictEqual(removed, 0, 'Delete on a radio removed the shape');
   f({ key: 'Delete', target: { tagName: 'BODY' } });
   assert.strictEqual(removed, 1);
   // Ctrl+P on a non-Latin layout (e.key 'з', e.code 'KeyP') must still be intercepted.
@@ -157,7 +158,7 @@ for (const [active, ends] of [['edit', false], ['body', true]]) {
 {
   const src = (await import('node:fs')).readFileSync('./src/editor.js', 'utf8'), m = re => src.match(re)[0];
   let release, downs = 0;
-  const stage = { classList: { contains: c => c === 'marking', remove() {} }, setPointerCapture() {} }, shot = {}, el = { style: {} };
+  const stage = { classList: { contains: () => false, remove() {} }, setPointerCapture() {} }, shot = {}, el = { style: {}, setAttribute() {} };
   const t = new Function('$', 'stage', 'shot', 'sel', 'edit', 'document', 'URL', 'OffscreenCanvas', 'createImageBitmap', 'cropping', 'marking', 'cropDown', 'markDown', 'applyZoom', 'show',
     `let gesture = false, editing = null, swapping = false, png = 'old', off = { x: 0, y: 0 }, original, box = { l: 2, t: 2, r: 6, b: 6 }, devicePixelRatio = 1;
     ${m(/function setShot\([\s\S]*?\n\}/)} ${m(/function endCrop\([\s\S]*?\n\}/)} ${m(/async function applyCrop\([\s\S]*?\n\}/)}
@@ -207,11 +208,11 @@ for (const [active, ends] of [['edit', false], ['body', true]]) {
 // Save: a failed write is reported, a cancelled dialog is silent; only a save that went through counts as saved (Esc won't ask).
 {
   const src = (await import('node:fs')).readFileSync('./src/editor.js', 'utf8');
-  const els = {}, $ = id => (els[id] ??= { value: 'png', textContent: '' });
+  const els = {}, $ = id => (els[id] ??= { value: 'png', textContent: '' }), opts = { format: { value: 'png' } };
   let result;
-  const [run, saved] = new Function('$', 'encode', 'invoke', 'png', 'state',
+  const [run, saved] = new Function('$', 'encode', 'invoke', 'png', 'state', 'opts',
     `let saved = 'blank'; const ACTIONS = {${src.match(/async save\(fmt\) \{[\s\S]*?\n  \},/)[0]}}; ${src.match(/let busy = false;[\s\S]*?\n\}/)[0]}; return [run, () => saved];`)(
-    $, async () => new Blob(['x']), async (cmd, body, opts) => { assert.deepStrictEqual([cmd, opts.headers.ext], ['save', 'png']); return result(); }, {}, () => 'drawn');
+    $, async () => new Blob(['x']), async (cmd, body, o) => { assert.deepStrictEqual([cmd, o.headers.ext], ['save', 'png']); return result(); }, {}, () => 'drawn', opts);
   result = () => { throw 'Access is denied. (os error 5)'; };
   await run('save');
   assert.strictEqual(els.status.textContent, 'Failed: Access is denied. (os error 5)', 'failed write not reported');
@@ -232,8 +233,12 @@ for (const [active, ends] of [['edit', false], ['body', true]]) {
     a => log.push(a), () => {}, () => false, () => marking, () => {}, {}, () => {}, () => log.push('render'), stage, () => log.push('close'))({ key: 'Escape', target: {} });
   key(0, 'select'); key('null', 'arrow');
   assert.deepStrictEqual(log, ['render', 'render'], 'Esc closed with a shape selected or a drawing tool picked');
-  key('null', 'select'); key('null', 'arrow', false);
-  assert.deepStrictEqual(log.slice(2), ['close', 'close'], 'Esc with nothing to step back from did not close');
+  key('null', 'select');
+  assert.deepStrictEqual(log.slice(2), ['close'], 'Esc with nothing to step back from did not close');
+  globalThis.document = { querySelector: () => ({}) }; // Save menu open: Esc is the menu's
+  key('null', 'select');
+  assert.strictEqual(log.length, 3, 'Esc with the Save menu open stepped back or closed');
+  globalThis.document = { querySelector: () => null };
   const ask = new Function('state', 'saved', 'confirm', 'invoke', `${src.match(/const closeEditor = .*/)[0]} return closeEditor;`);
   const closed = [];
   ask(() => 'a', 'a', () => assert.fail('asked with nothing unsaved'), c => closed.push(c))();
@@ -273,5 +278,24 @@ for (const [active, ends] of [['edit', false], ['body', true]]) {
   const edit = { focus() {}, getBoundingClientRect: () => ({ top: 30 }) };
   new Function('shapes', 'edit', 'render', 'header', 'scrollBy', `let editing, cur; ${src}; startEdit(0);`)([{ text: 'a' }], edit, () => {}, { offsetHeight: 50 }, (x, y) => { dy += y; });
   assert.strictEqual(dy, -20, 'startEdit scrolls the editor out from under the header');
+}
+// Single-letter tool keys click the button whose data-key matches; other keys and Ctrl+letter don't.
+{
+  const src = (await import('node:fs')).readFileSync('./src/editor.js', 'utf8'), html = (await import('node:fs')).readFileSync('./src/index.html', 'utf8');
+  const clicked = [];
+  globalThis.document = { querySelector: q => q === ':popover-open' ? null : (clicked.push(q), { click() {} }) };
+  const k = new Function('run', 'finishEdit', 'cropping', 'remove', 'edit', 'go', 'render', 'stage', 'closeEditor',
+    `let gesture = false, cur = null, tool = 'select', onkeydown; ${src.match(/onkeydown = e => \{[\s\S]*?\n\};/)[0]} return onkeydown;`)(
+    () => {}, () => {}, () => false, () => {}, {}, () => {}, () => {}, { dataset: {} }, () => {});
+  for (const key of ['a', 'X', '"', ' ', '1']) k({ key, target: { tagName: 'BODY' } });
+  k({ key: 'a', ctrlKey: true, target: { tagName: 'BODY' }, preventDefault() {} });
+  k({ key: 'r', target: { tagName: 'INPUT' } });
+  assert.deepStrictEqual(clicked, ['[data-key="A"]', '[data-key="X"]']);
+  // Every tool has a dock entry, and every bound key exists once.
+  const kinds = new Function(`${src.match(/const KINDS = .*/)[0]} return KINDS;`)();
+  for (const [, t] of html.matchAll(/data-tool="(\w+)"/g)) assert.ok(t in kinds, `no dock kinds for tool ${t}`);
+  const keys = [...html.matchAll(/data-key="(\w)"/g)].map(m => m[1]);
+  assert.strictEqual(new Set(keys).size, keys.length, 'duplicate data-key');
+  globalThis.document = { querySelector: () => null };
 }
 console.log('ok');
