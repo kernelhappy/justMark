@@ -343,6 +343,18 @@ fn watch_follows_the_folder_when_it_moves() {
     let _ = std::fs::remove_dir_all(base);
 }
 
+/// What a Start-at-login click should make the entry: the opposite of what it really is now.
+fn login_target(enabled_now: bool) -> bool {
+    !enabled_now
+}
+
+#[test]
+fn login_click_flips_real_state() {
+    // Tick stale-checked, entry disabled in Task Manager: the click must enable.
+    assert!(login_target(false));
+    assert!(!login_target(true));
+}
+
 fn main() {
     let app = tauri::Builder::default()
         // A second launch (e.g. "Open with") hands its files to the running tray instance.
@@ -365,7 +377,12 @@ fn main() {
                 open(&h, a.into(), Instant::now(), false);
             }
             // Start at login is an HKCU Run entry for this exe, off until ticked here.
-            let login = CheckMenuItem::with_id(app, "login", "Start at login", true, app.autolaunch().is_enabled()?, None::<&str>)?;
+            // An entry left by another copy (dev build, moved exe) still reads as enabled, so re-point it here.
+            let on = app.autolaunch().is_enabled()?;
+            if on {
+                let _ = app.autolaunch().enable();
+            }
+            let login = CheckMenuItem::with_id(app, "login", "Start at login", true, on, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit snarkymark", true, None::<&str>)?;
             let item = login.clone();
             TrayIconBuilder::new()
@@ -375,9 +392,9 @@ fn main() {
                 .on_menu_event(move |app, e| match e.id().as_ref() {
                     "quit" => app.exit(0),
                     "login" => {
-                        // The click already flipped the tick; make the Run entry match, and show the truth if that failed.
+                        // Flip the real state, not the tick: Task Manager can change it behind a stale tick.
                         let a = app.autolaunch();
-                        let _ = if item.is_checked().unwrap_or(false) { a.enable() } else { a.disable() };
+                        let _ = if login_target(a.is_enabled().unwrap_or(false)) { a.enable() } else { a.disable() };
                         let _ = item.set_checked(a.is_enabled().unwrap_or(false));
                     }
                     _ => {}
