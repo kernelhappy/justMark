@@ -222,7 +222,7 @@ globalThis.isReload = (await import('./src/markup.js')).isReload; // editor.js i
     `let gesture = false, editing = null, swapping = false, png = 'old', off = { x: 0, y: 0 }, original, box = { l: 2, t: 2, r: 6, b: 6 }, devicePixelRatio = 1;
     ${m(/function setShot\([\s\S]*?\n\}/)} ${m(/function endCrop\([\s\S]*?\n\}/)} ${m(/async function applyCrop\([\s\S]*?\n\}/)}
     ${m(/stage\.onpointerdown = [\s\S]*?\n\};/)} ${m(/stage\.onpointercancel = [\s\S]*?\n\};/)} ${m(/shot\.onload = [\s\S]*?\n\};/)} return applyCrop;`)(
-    () => el, stage, shot, el, {}, { activeElement: { blur() {} } }, { createObjectURL: () => 'blob:new', revokeObjectURL() {} },
+    () => el, stage, shot, el, {}, { activeElement: { blur() {} }, querySelector: () => null }, { createObjectURL: () => 'blob:new', revokeObjectURL() {} },
     class { getContext() { return { drawImage() {} }; } convertToBlob() { return 'new'; } }, () => new Promise(r => { release = r; }),
     () => false, () => true, () => downs++, () => downs++, () => {}, () => {});
   const down = () => stage.onpointerdown({ button: 0, pointerId: 1, target: {}, preventDefault() {} }) || stage.onlostpointercapture({});
@@ -479,4 +479,17 @@ for (const a of JSON.parse((await import('node:fs')).readFileSync('./src-tauri/t
   const shot = {}, el = { textContent: '' }, $ = () => el, show = () => {}, document = { querySelectorAll: () => [] };
   eval(line); shot.onerror();
   assert.strictEqual(swapping, false, 'failed image load left swapping stuck on');
+}
+// editor-r2-3: a press on the capture with the Save menu open only closes the menu (light dismiss doesn't fire there).
+{
+  const src = (await import('node:fs')).readFileSync('./src/editor.js', 'utf8');
+  let hidden = false, drawn = false;
+  const menu = { hidePopover: () => { hidden = true; } };
+  const stage = {}, document = { querySelector: () => menu, activeElement: { blur() {} } };
+  const gesture = false, swapping = false, edit = {}, editing = null;
+  const cropping = () => false, markDown = () => { drawn = true; }, cropDown = markDown, finishEdit = () => {};
+  stage.setPointerCapture = () => {};
+  eval(src.match(/stage\.onpointerdown = e => \{[\s\S]*?\n\};/)[0]);
+  stage.onpointerdown({ button: 0, target: {}, preventDefault() {}, pointerId: 1 });
+  assert.deepStrictEqual([hidden, drawn], [true, false], 'stage press with Save menu open drew instead of closing the menu');
 }

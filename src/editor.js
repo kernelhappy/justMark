@@ -483,6 +483,8 @@ function markDown(e) {
 // Losing the capture (release, pointercancel) ends the gesture as a release would, so hover can't keep drawing.
 stage.onpointerdown = e => {
   if (gesture || swapping || e.button || e.target === edit) return;
+  const menu = document.querySelector(':popover-open'); // the press would draw under the Save menu: light dismiss doesn't fire on the stage
+  if (menu) return menu.hidePopover();
   if (editing != null) return finishEdit();
   e.preventDefault(); // which also keeps focus where it was, so drop it from the toolbar: a focus ring there looks like the active tool
   document.activeElement.blur();
