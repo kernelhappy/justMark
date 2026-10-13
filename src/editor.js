@@ -274,6 +274,7 @@ async function applyCrop() {
 $('crop').onclick = () => {
   if (cropping()) return applyCrop();
   finishEdit();
+  endPoly();
   cur = null;
   render();
   stage.classList.add('cropping');
@@ -727,6 +728,7 @@ onkeydown = e => {
   }
   if ((e.ctrlKey || e.metaKey) && (k === 'z' || k === 'y')) {
     e.preventDefault();
+    endPoly(); // a polygon being drawn closes first, as a toolbar Undo does
     go(k === 'y' || e.shiftKey ? 1 : -1);
   } else if ((e.ctrlKey || e.metaKey) && k === 'c') {
     e.preventDefault();

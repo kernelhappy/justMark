@@ -749,3 +749,13 @@ for (const a of JSON.parse((await import('node:fs')).readFileSync('./src-tauri/t
   const kinds = new Function(`${SRC.match(/const KINDS = .*/)[0]} return KINDS;`)();
   assert.deepStrictEqual(Object.keys(kinds).filter(k => kinds[k].includes('o')), ['pen', 'line', 'arrow', 'rect', 'ellipse', 'cloud', 'poly']);
 }
+// A polygon being drawn closes before Ctrl+Z / Ctrl+Y and before Crop, so the history never holds an open one.
+{
+  const log = [];
+  const k = new Function('run', 'finishEdit', 'cropping', 'remove', 'edit', 'go', 'render', 'stage', 'closeEditor', 'endPoly',
+    `let gesture = false, poly = 0, cur = null, tool = 'poly', onkeydown; ${SRC.match(/onkeydown = e => \{[\s\S]*?\n\};/)[0]} return onkeydown;`)(
+    () => {}, () => {}, () => false, () => {}, {}, d => log.push('go'), () => {}, { dataset: {} }, () => {}, () => log.push('end'));
+  k({ ctrlKey: true, key: 'z', target: { tagName: 'BODY' }, preventDefault() {} });
+  assert.deepStrictEqual(log, ['end', 'go'], 'Ctrl+Z with a polygon being drawn');
+  assert.match(SRC.match(/\$\('crop'\)\.onclick = [\s\S]*?\n\};/)[0], /finishEdit\(\);\n  endPoly\(\);/, 'Crop does not close a polygon being drawn');
+}
