@@ -6,7 +6,6 @@ macro_rules! log {
 }
 
 use notify::{EventKind, RecursiveMode, Watcher};
-use tauri_plugin_autostart::ManagerExt;
 use std::{
     collections::HashMap,
     fs::File,
@@ -377,6 +376,23 @@ fn login_click_flips_real_state() {
     assert!(!login_target(true));
 }
 
+/// The Start-at-login entry: HKCU only (an elevated run must not land it in HKLM, where a normal run
+/// can't clear it), and the exe path quoted so a space in it can't be split at login.
+fn login_launcher(exe: &Path) -> auto_launch::AutoLaunch {
+    auto_launch::AutoLaunchBuilder::new()
+        .set_app_name("snarkymark")
+        .set_app_path(&format!("\"{}\"", exe.display()))
+        .set_windows_enable_mode(auto_launch::WindowsEnableMode::CurrentUser)
+        .build()
+        .expect("app name and path are set")
+}
+
+#[test]
+fn login_entry_quotes_exe_path() {
+    let a = login_launcher(Path::new(r"C:\Users\John Smith\snarkymark.exe"));
+    assert_eq!(a.get_app_path(), r#""C:\Users\John Smith\snarkymark.exe""#);
+}
+
 fn main() {
     let app = tauri::Builder::default()
         // A second launch (e.g. "Open with") hands its files to the running tray instance.
@@ -385,7 +401,6 @@ fn main() {
                 open(app, from_cwd(&cwd, a), Instant::now(), false);
             }
         }))
-        .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, None))
         .manage(Shots::default())
         .invoke_handler(tauri::generate_handler![shot, ready, save, close])
         .on_window_event(|w, e| {
@@ -400,9 +415,10 @@ fn main() {
             }
             // Start at login is an HKCU Run entry for this exe, off until ticked here.
             // An entry left by another copy (dev build, moved exe) still reads as enabled, so re-point it here.
-            let on = app.autolaunch().is_enabled()?;
+            let a = login_launcher(&std::env::current_exe()?);
+            let on = a.is_enabled()?;
             if on {
-                let _ = app.autolaunch().enable();
+                let _ = a.enable();
             }
             let login = CheckMenuItem::with_id(app, "login", "Start at login", true, on, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit snarkymark", true, None::<&str>)?;
@@ -415,7 +431,6 @@ fn main() {
                     "quit" => app.exit(0),
                     "login" => {
                         // Flip the real state, not the tick: Task Manager can change it behind a stale tick.
-                        let a = app.autolaunch();
                         let _ = if login_target(a.is_enabled().unwrap_or(false)) { a.enable() } else { a.disable() };
                         let _ = item.set_checked(a.is_enabled().unwrap_or(false));
                     }
