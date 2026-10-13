@@ -361,7 +361,7 @@ fn main() {
         })
         .setup(|app| {
             let h = app.handle().clone();
-            for a in std::env::args().skip(1) {
+            for a in std::env::args_os().skip(1) {
                 open(&h, a.into(), Instant::now(), false);
             }
             // Start at login is an HKCU Run entry for this exe, off until ticked here.
@@ -412,4 +412,10 @@ fn screenshots_dir_is_created_when_missing() {
     let dir = screenshots_dir(None, Some(pics.clone())).unwrap();
     assert!(dir == pics.join("Screenshots") && dir.is_dir());
     let _ = std::fs::remove_dir_all(pics);
+}
+
+#[test]
+fn launch_paths_need_not_be_unicode() {
+    // std::env::args panics on a path with an unpaired surrogate; libtest reads args too, so check the source.
+    assert!(!include_str!("main.rs").contains(concat!("env::args", "()")));
 }
