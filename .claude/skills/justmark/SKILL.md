@@ -85,11 +85,11 @@ smaller image encoded first), Rust writes nothing and the markup stays unsaved: 
   the text editor), and the UI below.
 - **UI layout** (redesign 2026-10-12, `index.html` only; no framework, no icon font — inline SVG sprite):
   - *Top bar*: tool segment (each tool has a one-letter key in `data-key`, which is also the binding:
-    V H P L A R E C T B; X = Crop) · Crop / Undo crop · Undo / Redo · Copy · Save split button. Save's
+    V H P L A R E C T B; X = Crop) · Crop · Undo / Redo · Copy · Save split button. Save's
     label shows the format Ctrl+S will write; its ▾ opens a popover (Format, Quality for JPG/PDF, Print).
   - *Style dock* (floating, bottom center): only what applies to the selected shape, else the current
     tool (`KINDS` in editor.js → `#props[data-k]`); hidden for Select with nothing selected. While
-    cropping it becomes the crop bar (hint, Cancel, Apply).
+    cropping it becomes the crop bar (hint, Reset, Cancel, Apply).
   - *Zoom pill* (bottom right): −, % (click = actual size), +, Fit, Fit width.
   - *Status* is a toast above the dock; Saved/Copied fade after 2.5 s, errors stay until clicked.
   - Theme: system light/dark via `light-dark()` tokens on `:root`; violet accent so UI state never looks
@@ -135,7 +135,7 @@ So mouse-up → editor visible ≈ 0.6–0.8 s. Regressions past ~1 s or idle pa
   chosen target and the picker shows each target's color. Callout: line (border + tail), fill (box,
   today #fff), text (today #111). Text: text + optional background fill. Rect, ellipse, cloud, polygon:
   Line · Fill, fill defaulting to the line color. The Fill target adds a "none" swatch.
-- **Re-croppable crop:** a crop is a view of the original capture, never destructive. Crop again shows
+- **Re-croppable crop** (built): a crop is a view of the original capture, never destructive. Crop again shows
   the whole original with the current crop as the box; the crop bar is Reset (whole capture) · Cancel ·
   Apply; each applied crop is one undo step. The Undo crop button goes.
 

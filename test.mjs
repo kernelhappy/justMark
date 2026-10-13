@@ -224,28 +224,62 @@ globalThis.isReload = (await import('./src/markup.js')).isReload; // editor.js i
     assert.ok(style.pen.w === 4 * r && style.pen.size === 20 * r && style.hl.w === 8 * r, `at ${r}: ${JSON.stringify(style)}`);
   }
 }
-// Crop swap: from Apply crop until the new image has loaded, a gesture would mix the old image's geometry with the new offset.
+// Re-croppable crop: a crop is a view of the original, undoable; Crop again shows the original with the crop as the box.
+// From Apply until the new image has loaded, a gesture would mix the old image's geometry with the new offset.
 {
   const src = (await import('node:fs')).readFileSync('./src/editor.js', 'utf8'), m = re => src.match(re)[0];
   let release, downs = 0;
-  const stage = { classList: { contains: () => false, remove() {} }, setPointerCapture() {} }, shot = {}, el = { style: {}, setAttribute() {} };
-  const t = new Function('$', 'stage', 'shot', 'sel', 'edit', 'document', 'URL', 'OffscreenCanvas', 'createImageBitmap', 'cropping', 'marking', 'cropDown', 'markDown', 'applyZoom', 'show', 'report',
-    `let gesture = false, editing = null, swapping = false, png = 'old', off = { x: 0, y: 0 }, original, box = { l: 2, t: 2, r: 6, b: 6 }, devicePixelRatio = 1;
-    ${m(/function setShot\([\s\S]*?\n\}/)} ${m(/function endCrop\([\s\S]*?\n\}/)} ${m(/async function applyCrop\([\s\S]*?\n\}/)}
-    ${m(/stage\.onpointerdown = [\s\S]*?\n\};/)} ${m(/stage\.onpointercancel = [\s\S]*?\n\};/)} ${m(/shot\.onload = [\s\S]*?\n\};/)} return applyCrop;`)(
-    () => el, stage, shot, el, {}, { activeElement: { blur() {} }, querySelector: () => null }, { createObjectURL: () => 'blob:new', revokeObjectURL() {} },
-    class { getContext() { return { drawImage() {} }; } convertToBlob() { return 'new'; } }, () => new Promise(r => { release = r; }),
-    () => false, () => true, () => downs++, () => downs++, () => {}, () => {}, () => {});
+  const cls = new Set(), stage = { classList: { contains: c => cls.has(c), add: c => cls.add(c), remove: c => cls.delete(c) }, setPointerCapture() {} };
+  const shot = { naturalWidth: 100, naturalHeight: 80 }, els = {}, $ = id => (els[id] ??= { style: {}, setAttribute() {} }), sel = $('sel');
+  const t = new Function('$', 'stage', 'shot', 'sel', 'edit', 'document', 'URL', 'OffscreenCanvas', 'createImageBitmap', 'cropDown', 'markDown', 'applyZoom', 'show', 'report', 'render', 'finishEdit', 'place',
+    `let gesture = false, editing = null, swapping = false, png = 'orig', off = { x: 0, y: 0 }, shapes = [], hist = ['[[],null]'], step = 0, cur = null;
+    const cropping = () => stage.classList.contains('cropping');
+    ${m(/let box, full, crop = .*/)}
+    ${m(/const original = .*/)}
+    ${m(/function setShot\([\s\S]*?\n\}/)} ${m(/function showCrop\([\s\S]*?\n\}/)} ${m(/function endCrop\([\s\S]*?\n\}/)}
+    ${m(/async function applyCrop\([\s\S]*?\n\}/)} ${m(/\$\('crop'\)\.onclick = [\s\S]*?\n\};/)} ${m(/\$\('cropreset'\)\.onclick = .*/)} ${m(/const state = .*/)}
+    ${m(/function commit\(\) \{[\s\S]*?\n\}/)} ${m(/function go\(d\) \{[\s\S]*?\n\}/)}
+    ${m(/stage\.onpointerdown = [\s\S]*?\n\};/)} ${m(/stage\.onpointercancel = [\s\S]*?\n\};/)} ${m(/shot\.onload = [\s\S]*?\n\};/)}
+    return { applyCrop, endCrop, go, state, get: () => ({ png, off, crop, box }), setBox: b => { box = b; } };`)(
+    $, stage, shot, sel, {}, { activeElement: { blur() {} }, querySelector: () => null }, { createObjectURL: b => b, revokeObjectURL() {} },
+    class { getContext() { return { drawImage: i => { this.i = i; } }; } convertToBlob() { return `crop ${this.i.join()}`; } },
+    (b, ...r) => release === undefined ? new Promise(res => { release = () => res(r); }) : r,
+    () => downs++, () => downs++, () => {}, () => {}, () => {}, () => {}, () => {}, () => {});
   const down = () => stage.onpointerdown({ button: 0, pointerId: 1, target: {}, preventDefault() {} }) || stage.onlostpointercapture({});
-  const applying = t();
+  shot.onload(); // the original: 100 x 80
+  const blank = t.state();
+  cls.add('cropping'); t.setBox({ l: 0, t: 0, r: 50, b: 40 });
+  const applying = t.applyCrop();
   down();
-  release({});
+  release();
   await applying;
   down();
-  assert.strictEqual(downs, 0, 'gesture started while the cropped image was swapping in');
+  assert.strictEqual(downs, 0, 'gesture started while the crop was encoding or the cropped image swapping in');
   shot.onload();
   down();
   assert.strictEqual(downs, 1);
+  assert.deepStrictEqual(t.get().off, { x: 0, y: 0 });
+  assert.strictEqual(t.get().png, 'crop 0,0,50,40');
+  assert.notStrictEqual(t.state(), blank, 'a crop at (0,0) counted as saved');
+  // Crop again: the original shows, with the crop as the box; Cancel goes back to the crop.
+  els.crop.onclick();
+  assert.deepStrictEqual([t.get().png, t.get().box], ['orig', { l: 0, t: 0, r: 50, b: 40 }]);
+  t.endCrop();
+  assert.deepStrictEqual([t.get().png, cls.has('cropping')], ['crop 0,0,50,40', false]);
+  // A second crop (in the original's pixels), then undo steps back through both.
+  els.crop.onclick(); t.setBox({ l: 10, t: 5, r: 60, b: 45 });
+  await t.applyCrop();
+  assert.deepStrictEqual([t.get().png, t.get().off], ['crop 10,5,50,40', { x: 10, y: 5 }]);
+  t.go(-1);
+  assert.deepStrictEqual([t.get().png, t.get().off, t.get().crop], ['crop 0,0,50,40', { x: 0, y: 0 }, { x: 0, y: 0, w: 50, h: 40 }]);
+  t.go(-1);
+  assert.deepStrictEqual([t.get().png, t.get().off, t.state()], ['orig', { x: 0, y: 0 }, blank]);
+  t.go(1); t.go(1);
+  // Reset makes the box the whole capture; applying it is no crop at all.
+  els.crop.onclick(); els.cropreset.onclick();
+  assert.deepStrictEqual(t.get().box, { l: 0, t: 0, r: 100, b: 80 });
+  await t.applyCrop();
+  assert.deepStrictEqual([t.get().png, t.get().crop], ['orig', null]);
 }
 // Toolbar presses while a new text is open: the editor keeps focus (so blur can't delete the empty text first), a swatch styles the pending text, Undo only cancels it.
 {
@@ -268,7 +302,7 @@ globalThis.isReload = (await import('./src/markup.js')).isReload; // editor.js i
 {
   const src = (await import('node:fs')).readFileSync('./src/editor.js', 'utf8');
   const shapes = [{ type: 'text', c: 'red', size: 20, text: 'abc' }], tools = {}, log = [], edit = { value: '' };
-  new Function('$', 'shapes', 'render', 'finishEdit', 'go', 'edit', `let gesture = false, cur = 0, editing = 0, tool = 'select', remove;
+  new Function('$', 'shapes', 'render', 'finishEdit', 'go', 'edit', `let gesture = false, cur = 0, editing = 0, tool = 'select', remove; const cropping = () => false;
     ${src.match(/\$\('tools'\)\.onclick = [\s\S]*?\n};/)[0]}`)(() => tools, shapes, () => {}, () => log.push('finish'), () => log.push('go'), edit);
   tools.onclick({ target: { closest: () => ({ dataset: { cmd: 'undo' } }) } });
   assert.deepStrictEqual(log, ['go'], 'Undo after clearing an existing text deleted it instead of undoing');
@@ -336,13 +370,6 @@ globalThis.isReload = (await import('./src/markup.js')).isReload; // editor.js i
   ask(() => 'a', 'a', () => assert.fail('asked with nothing unsaved'), c => closed.push(c))();
   ask(() => 'b', 'a', () => false, c => closed.push(c))();
   assert.deepStrictEqual(closed, ['close'], 'closed despite a declined confirm');
-  // A crop anchored at the top-left corner (or a different crop from the same corner) is still unsaved work.
-  const crop = new Function('png', 'endCrop', 'setShot', 'createImageBitmap', 'OffscreenCanvas',
-    `let off = { x: 0, y: 0 }, hist = ['[]'], step = 0, box, original, swapping; ${src.match(/const state = .*/)[0]} let saved = state(); ${src.match(/async function applyCrop[\s\S]*?\n}/)[0]}
-    return async b => { box = b; const was = saved; await applyCrop(); saved = state(); return was !== saved; };`)(
-    {}, () => {}, () => {}, async () => ({}), class { getContext() { return { drawImage() {} }; } convertToBlob() { return {}; } });
-  assert.ok(await crop({ l: 0, t: 0, r: 50, b: 40 }), 'a crop at (0,0) counted as saved');
-  assert.ok(await crop({ l: 0, t: 0, r: 30, b: 20 }), 'a different crop from the same corner counted as saved');
 }
 // Editing text in a light swatch (White/Yellow) must not sit on #edit's near-white CSS background.
 {
@@ -495,11 +522,14 @@ for (const a of JSON.parse((await import('node:fs')).readFileSync('./src-tauri/t
 // A failed crop encode must say so in the status bar, not just end crop mode silently (bughunt editor-r1-9).
 {
   const src = (await import('node:fs')).readFileSync('./src/editor.js', 'utf8').match(/async function applyCrop[\s\S]*?\n}\n/)[0];
-  const status = { textContent: '' }, png = {};
-  const applyCrop = new Function('$', 'png', 'box', 'off', 'endCrop', 'createImageBitmap', 'OffscreenCanvas', 'setShot', 'original', 'swapping',
-    `${src} return applyCrop;`)(() => status, png, { l: 0, t: 0, r: 5, b: 5 }, { x: 0, y: 0 }, () => {}, async () => { throw new Error('oom'); }, class {}, () => {}, null, false);
+  const status = { textContent: '' };
+  let committed = 0;
+  const [applyCrop, cut] = new Function('$', 'box', 'endCrop', 'createImageBitmap', 'OffscreenCanvas', 'original', 'commit', 'showCrop', 'cropping',
+    `let full = [9, 9], crop = null, cutting = false; const crops = new Map(); ${src} return [applyCrop, () => cutting];`)(
+    () => status, { l: 0, t: 0, r: 5, b: 5 }, () => {}, async () => { throw new Error('oom'); }, class {}, {}, () => committed++, () => {}, () => false);
   await applyCrop();
   assert.match(status.textContent, /oom/, 'crop failure was silent');
+  assert.deepStrictEqual([committed, cut()], [0, false], 'a failed crop committed, or left gestures blocked');
 }
 
 // A swapped-in image that fails to load must clear `swapping`, or every stage gesture stays blocked (editor-r1-10).
@@ -516,7 +546,7 @@ for (const a of JSON.parse((await import('node:fs')).readFileSync('./src-tauri/t
   let hidden = false, drawn = false;
   const menu = { hidePopover: () => { hidden = true; } };
   const stage = {}, document = { querySelector: () => menu, activeElement: { blur() {} } };
-  const gesture = false, swapping = false, edit = {}, editing = null;
+  const gesture = false, swapping = false, cutting = false, edit = {}, editing = null;
   const cropping = () => false, markDown = () => { drawn = true; }, cropDown = markDown, finishEdit = () => {};
   stage.setPointerCapture = () => {};
   eval(src.match(/stage\.onpointerdown = e => \{[\s\S]*?\n\};/)[0]);

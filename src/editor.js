@@ -93,9 +93,9 @@ const ACTIONS = {
   },
 };
 
-// What Save or Copy last exported: Esc closes without asking while nothing since is unsaved.
-const state = () => hist[step] + JSON.stringify(off);
-let saved = '[]{"x":0,"y":0}';
+// What Save or Copy last exported: Esc closes without asking while nothing since is unsaved. The history has the crop too.
+const state = () => hist[step];
+let saved = '[[],null]';
 // What a Save or Copy the user pressed last exported. Rust is told about unsaved work against this, not `saved`: an
 // editor with unsaved work doesn't take the next snip, and Max windows closes others first. An Auto copy fires
 // whenever focus leaves (a new snip too), so it lets Esc close without asking but doesn't make the window disposable.
@@ -165,7 +165,7 @@ function applyZoom() {
   $('zoom').textContent = Math.round(scale * 100) + '%';
   render();
 }
-// While a crop or Undo crop swaps the image, gestures wait: until it loads, the old image's geometry would meet the new offset.
+// While a crop, Crop again or an undo swaps the image, gestures wait: until it loads, the old image's geometry would meet the new offset.
 let swapping = false, shown = false;
 // The window starts hidden; Rust sizes it to what the page asks for (capped to the screen) and shows it.
 // The capture goes in image px, not over devicePixelRatio: that is the scale where the hidden window was made, maybe not
@@ -174,7 +174,9 @@ let swapping = false, shown = false;
 const show = (w, h) => shown || (shown = true, onerror = onunhandledrejection = null, invoke('ready', { img: [w, h], chrome: [48, header.offsetHeight + 120], min: [960, 480] }));
 shot.onload = () => {
   swapping = false;
+  full ??= [shot.naturalWidth, shot.naturalHeight]; // the first image is the original
   applyZoom();
+  if (cropping() && box) { place(sel, box); sel.hidden = false; } // Crop again: the current crop over the whole original
   show(shot.naturalWidth, shot.naturalHeight); // the capture at actual size, plus the chrome
 };
 // A PNG that passed the magic check but won't decode: disable everything as for a failed load, or Save writes the broken bytes.
@@ -212,47 +214,62 @@ function place(el, b, o = { x: 0, y: 0 }) {
   Object.assign(el.style, { left: (b.l - o.x) / W * 100 + '%', top: (b.t - o.y) / H * 100 + '%', width: (b.r - b.l) / W * 100 + '%', height: (b.b - b.t) / H * 100 + '%' });
 }
 
-// Crop: Crop starts a selection. Drag to draw a box, then drag its handles to resize it or its inside to move it.
-// Enter or Apply crop keeps it, Esc cancels. Undo crop goes back to the full capture.
-let original, box; // box edges in capture pixels: { l, t, r, b }
+// Crop: a view of the original capture, never destructive. Crop shows the whole original with the current crop as the box;
+// drag to draw a box, drag its handles to resize it or its inside to move it. Enter or Apply keeps it (one undo step),
+// Esc or Cancel goes back, Reset makes the box the whole capture.
+// crop: { x, y, w, h } in capture pixels, or null; it is in the history with the shapes. crops: each crop's image, by JSON.
+let box, full, crop = null, cutting = false; // box edges in capture pixels: { l, t, r, b }; full: the original's [w, h]
+const original = png, crops = new Map([['null', png]]);
 const clamp = (v, max) => Math.min(max, Math.max(0, v));
-function setShot(blob) {
+// The image showing and where it starts in capture pixels, set together: an export pairs them (see encode).
+function setShot(blob, o) {
   swapping = true;
   png = blob;
+  off = o;
   URL.revokeObjectURL(shot.src);
   shot.src = URL.createObjectURL(blob);
-  $('uncrop').hidden = !original;
+}
+// Back to the current crop's image, unless it is showing.
+function showCrop() {
+  const b = crops.get(JSON.stringify(crop));
+  if (b !== png) setShot(b, crop ? { x: crop.x, y: crop.y } : { x: 0, y: 0 });
 }
 function endCrop() {
   stage.classList.remove('cropping');
   sel.hidden = true;
   box = null;
   $('crop').setAttribute('aria-pressed', false);
+  showCrop();
 }
-// Leaves crop mode before the first await, so a repeat click or Enter can't apply twice and Esc has nothing left to cancel;
-// the new image and its offset are taken from one snapshot and set together.
+// Leaves crop mode before the first await, so a repeat click or Enter can't apply twice and Esc has nothing left to cancel.
+// The box is in the original's pixels (crop mode shows it whole).
 async function applyCrop() {
-  const b = box, src = png, o = off;
+  const b = box;
   endCrop();
   if (!b) return;
   const x = Math.floor(b.l), y = Math.floor(b.t), w = Math.round(b.r) - x, h = Math.round(b.b) - y;
   if (w <= 0 || h <= 0) return;
-  swapping = true;
-  try {
-    const img = await createImageBitmap(src, x, y, w, h), c = new OffscreenCanvas(w, h);
-    c.getContext('2d').drawImage(img, 0, 0);
-    const blob = await c.convertToBlob({ type: 'image/png' });
-    if (png !== src) return; // Undo crop landed meanwhile; applying now would make original a cropped image
-    original ??= src;
-    off = { x: o.x + x, y: o.y + y, w, h }; // w, h: only so state() sees a crop that keeps the top-left corner
-    setShot(blob);
-  } catch (e) {
-    $('status').textContent = 'Crop failed: ' + (e.message ?? e);
-  } finally {
-    if (png === src) swapping = false; // failed: no new image is coming
+  const next = x || y || w !== full[0] || h !== full[1] ? { x, y, w, h } : null, key = JSON.stringify(next);
+  if (key === JSON.stringify(crop)) return;
+  if (!crops.has(key)) {
+    cutting = true; // gestures wait: the offset changes when this lands
+    try {
+      const img = await createImageBitmap(original, x, y, w, h), c = new OffscreenCanvas(w, h);
+      c.getContext('2d').drawImage(img, 0, 0);
+      crops.set(key, await c.convertToBlob({ type: 'image/png' })); // ponytail: every crop's PNG is kept for undo; fine for a handful
+    } catch (e) {
+      $('status').textContent = 'Crop failed: ' + (e.message ?? e);
+      return;
+    } finally {
+      cutting = false;
+    }
+    if (cropping()) return; // Crop was pressed again meanwhile: it shows the original, with the old crop's box
   }
+  crop = next;
+  commit();
+  showCrop();
 }
-// The style dock turns into the crop bar (hint, Cancel, Apply) while cropping; see index.html.
+// The style dock turns into the crop bar (hint, Reset, Cancel, Apply) while cropping; see index.html.
 $('crop').onclick = () => {
   if (cropping()) return applyCrop();
   finishEdit();
@@ -260,10 +277,13 @@ $('crop').onclick = () => {
   render();
   stage.classList.add('cropping');
   $('crop').setAttribute('aria-pressed', true);
+  if (!crop) return;
+  box = { l: crop.x, t: crop.y, r: crop.x + crop.w, b: crop.y + crop.h };
+  setShot(original, { x: 0, y: 0 }); // the box is placed once it has loaded (see shot.onload)
 };
 $('cropapply').onclick = applyCrop;
 $('cropcancel').onclick = endCrop;
-$('uncrop').onclick = () => { if (cropping()) endCrop(); const o = original; original = null; off = { x: 0, y: 0 }; setShot(o); };
+$('cropreset').onclick = () => { box = { l: 0, t: 0, r: full[0], b: full[1] }; place(sel, box); sel.hidden = false; };
 function cropDown(e) {
   const W = shot.naturalWidth, H = shot.naturalHeight, [x0, y0] = at(e);
   // A handle drags its edges ('nw', 'e', ...), the box's inside moves it, anywhere else draws a new box from its 'se' corner.
@@ -293,7 +313,7 @@ function syncDpr() {
 }
 // What the style dock offers per shape type or tool (see render).
 const KINDS = { select: '', hl: 'c w', pen: 'c w', line: 'c w', arrow: 'c w', rect: 'c w f', ellipse: 'c w f', cloud: 'c w f', text: 'c s', callout: 'c w s' };
-let shapes = [], hist = ['[]'], step = 0, off = { x: 0, y: 0 }, tool = 'select', cur = null, editing = null, lastDown = 0, gesture = false;
+let shapes = [], hist = ['[[],null]'], step = 0, off = { x: 0, y: 0 }, tool = 'select', cur = null, editing = null, lastDown = 0, gesture = false;
 const style = { pen: { c: '#e53935', w: 4 * dpr, size: 20 * dpr, fill: false }, hl: { c: '#fdd835', w: 4 * dpr } };
 const styleOf = type => type === 'hl' ? style.hl : style.pen;
 // Lines, pens and text have no fill, so Fill shows and toggles the default with one of them selected.
@@ -338,8 +358,9 @@ function render() {
   $('tsize').textContent = Math.round((s?.size ?? style.pen.size) / dpr);
   report();
 }
+// Each history step is [shapes, crop].
 function commit() {
-  const j = JSON.stringify(shapes);
+  const j = JSON.stringify([shapes, crop]);
   if (j !== hist[step]) {
     hist.length = ++step;
     hist.push(j);
@@ -349,8 +370,9 @@ function commit() {
 function go(d) {
   if (!hist[step + d]) return;
   step += d;
-  shapes = JSON.parse(hist[step]);
+  [shapes, crop] = JSON.parse(hist[step]);
   cur = null;
+  showCrop(); // every crop in the history was applied here, so its image is in crops
   render();
 }
 function remove() {
@@ -380,7 +402,7 @@ $('tools').onclick = $('props').onclick = ({ target }) => {
     if (cropping()) endCrop();
     tool = stage.dataset.tool = d.tool;
     cur = null;
-  } else if (d.cmd) ({ undo: () => go(-1), redo: () => go(1), del: remove })[d.cmd]();
+  } else if (d.cmd) { if (cropping()) endCrop(); ({ undo: () => go(-1), redo: () => go(1), del: remove })[d.cmd](); }
   else {
     // A style button sets the style for new shapes of that kind and restyles the selected shape.
     // Text size and fill only apply to some shapes, so they always come from and go to the main style.
@@ -515,7 +537,7 @@ function markDown(e) {
 // One gesture at a time: while a drag holds the pointer, other pointers and the editing keys wait, since its handlers hold a fixed shape index.
 // Losing the capture (release, pointercancel) ends the gesture as a release would, so hover can't keep drawing.
 stage.onpointerdown = e => {
-  if (gesture || swapping || e.button || e.target === edit) return;
+  if (gesture || swapping || cutting || e.button || e.target === edit) return;
   const menu = document.querySelector(':popover-open'); // the press would draw under the Save menu: light dismiss doesn't fire on the stage
   if (menu) return menu.hidePopover();
   if (editing != null) return finishEdit();

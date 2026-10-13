@@ -197,7 +197,6 @@
   <symbol id="i-text" viewBox="0 0 24 24"><path d="M5 7V4.5h14V7"/><path d="M12 4.5v15"/><path d="M9 19.5h6"/></symbol>
   <symbol id="i-callout" viewBox="0 0 24 24"><path d="M5.5 4h13A1.5 1.5 0 0 1 20 5.5v9a1.5 1.5 0 0 1-1.5 1.5H11l-5 4v-4h-.5A1.5 1.5 0 0 1 4 14.5v-9A1.5 1.5 0 0 1 5.5 4z"/><path d="M8 8.5h8M8 12h5"/></symbol>
   <symbol id="i-crop" viewBox="0 0 24 24"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></symbol>
-  <symbol id="i-uncrop" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></symbol>
   <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></symbol>
   <symbol id="i-redo" viewBox="0 0 24 24"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></symbol>
   <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8.5" y="8.5" width="12" height="12" rx="2"/><path d="M15.5 5.5V5a1.5 1.5 0 0 0-1.5-1.5H5A1.5 1.5 0 0 0 3.5 5v9A1.5 1.5 0 0 0 5 15.5h.5"/></symbol>
@@ -227,8 +226,7 @@
     <button data-tool="callout" data-key="B" aria-label="Callout" data-tip=" · B&#10;Drag from the point to where the text goes"><svg class="i"><use href="#i-callout"/></svg></button>
   </div>
   <span class="sep"></span>
-  <button id="crop" data-key="X" aria-pressed="false" aria-label="Crop" data-tip=" · X&#10;Drag to pick the area to keep; Enter applies, Esc cancels"><svg class="i"><use href="#i-crop"/></svg></button>
-  <button id="uncrop" hidden aria-label="Undo crop" data-tip="&#10;Back to the full capture"><svg class="i"><use href="#i-uncrop"/></svg></button>
+  <button id="crop" data-key="X" aria-pressed="false" aria-label="Crop" data-tip=" · X&#10;Drag to pick the area to keep; Enter applies, Esc cancels. Crop again to change it: the whole capture is kept"><svg class="i"><use href="#i-crop"/></svg></button>
   <span class="grow"></span>
   <button data-cmd="undo" aria-label="Undo" data-tip=" · Ctrl+Z"><svg class="i"><use href="#i-undo"/></svg></button>
   <button data-cmd="redo" aria-label="Redo" data-tip=" · Ctrl+Y"><svg class="i"><use href="#i-redo"/></svg></button>
@@ -265,6 +263,7 @@
   <div id="props" class="pill" data-k="">
     <div class="g g-crop">
       <span class="hint">Drag to choose the area to keep</span>
+      <button id="cropreset" class="btn tip-up" aria-label="Reset" data-tip="&#10;The box becomes the whole capture">Reset</button>
       <button id="cropcancel" class="btn">Cancel <kbd>Esc</kbd></button>
       <button id="cropapply" class="btn primary"><svg class="i"><use href="#i-check"/></svg>Apply <kbd>Enter</kbd></button>
     </div>
