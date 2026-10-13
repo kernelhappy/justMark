@@ -278,9 +278,12 @@ function render() {
     }
   }
   if (editing != null) {
-    const s = shapes[editing], k = shot.clientWidth / W, p = s.tip ? PAD * s.size : 0;
+    const s = shapes[editing], k = shot.clientWidth / W, p = s.tip ? PAD * s.size : 0, H = shot.naturalHeight, b = bounds(s);
     ink.querySelector(`[data-i="${editing}"]`).style.visibility = 'hidden';
-    Object.assign(edit.style, { left: (s.x + p - off.x) / W * 100 + '%', top: (s.y + p - off.y) / shot.naturalHeight * 100 + '%', font: `600 ${s.size * k}px/${LH} system-ui, sans-serif`, color: s.tip ? '#111' : s.c, background: s.tip || !['#ffffff', '#fdd835'].includes(s.c) ? '' : '#000c' });
+    Object.assign(edit.style, { left: (s.x + p - off.x) / W * 100 + '%', top: (s.y + p - off.y) / shot.naturalHeight * 100 + '%', right: '', bottom: '', font: `600 ${s.size * k}px/${LH} system-ui, sans-serif`, color: s.tip ? '#111' : s.c, background: s.tip || !['#ffffff', '#fdd835'].includes(s.c) ? '' : '#000c' });
+    // A callout left of or above its point grows away from it while typing, as finishEdit will place it.
+    if (s.tip && b.l + b.r < 2 * s.tip[0]) Object.assign(edit.style, { left: '', right: (off.x + W - b.r + p) / W * 100 + '%' });
+    if (s.tip && b.t + b.b < 2 * s.tip[1]) Object.assign(edit.style, { top: '', bottom: (off.y + H - b.b + p) / H * 100 + '%' });
   }
   const now = s ?? styleOf(tool);
   for (const b of document.querySelectorAll('[data-tool], [data-c], [data-w], [data-fill], [data-cmd]')) {
@@ -367,8 +370,9 @@ function finishEdit() {
   if (text && was.tip) {
     // A callout left of or above its point keeps the edge facing the point, so new text grows away from it rather than over it.
     const a = bounds(was), b = bounds(shapes[i]);
-    if (a.l + a.r < 2 * was.tip[0]) shapes[i].x += a.r - b.r;
-    if (a.t + a.b < 2 * was.tip[1]) shapes[i].y += a.b - b.b;
+    // It stops at the image's left/top edge (or where it already was), or the overlay and exports clip the text.
+    if (a.l + a.r < 2 * was.tip[0]) shapes[i].x = Math.max(Math.min(off.x, was.x), was.x + a.r - b.r);
+    if (a.t + a.b < 2 * was.tip[1]) shapes[i].y = Math.max(Math.min(off.y, was.y), was.y + a.b - b.b);
   } else if (!text) {
     shapes.splice(i, 1);
     cur = null;

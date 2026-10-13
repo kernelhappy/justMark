@@ -305,9 +305,14 @@ globalThis.document = { querySelector: () => null }; // no Save menu open
 {
   const src = (await import('node:fs')).readFileSync('./src/editor.js', 'utf8').match(/function finishEdit[\s\S]*?\n}/)[0];
   const shapes = [{ type: 'callout', size: 10, x: 60, y: 60, text: '', em: 0, tip: [100, 100] }], measure = { measureText: l => ({ width: l.length * 60 }) };
-  new Function('shapes', 'measure', 'bounds', 'commit', 'edit', `let editing = 0, cur = 0; ${src}; finishEdit();`)(shapes, measure, bounds, () => {}, { value: 'abcdefgh\nx' });
+  const run = (shapes, value) => new Function('shapes', 'measure', 'bounds', 'commit', 'edit', 'off', `let editing = 0, cur = 0; ${src}; finishEdit();`)(shapes, measure, bounds, () => {}, { value }, { x: 0, y: 0 });
+  run(shapes, 'abcdefgh\nx');
   const b = bounds(shapes[0]);
   assert.ok(b.r <= 100 && b.b <= 100, 'callout box covers its own point');
+  // Near the image's left/top edge, growing away from the point stops at the edge rather than pushing the text off the capture.
+  const edge = [{ type: 'callout', size: 10, x: 5, y: 5, text: '', em: 0, tip: [300, 300] }];
+  run(edge, 'abcdefghijklmnop\nx\ny');
+  assert.ok(edge[0].x >= 0 && edge[0].y >= 0, 'callout pushed off the image edge');
 }
 // Editing a text whose top is under the fixed header scrolls it clear of the header.
 {
