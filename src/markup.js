@@ -7,7 +7,9 @@ export const LH = 1.25, PAD = 0.4; // line height and callout padding, in font s
 const NO = { l: -Infinity, t: -Infinity, r: Infinity, b: Infinity };
 const f = v => Math.round(v * 10) / 10;
 // Tabs become the one space canvas measures them as; characters XML can't hold (pasted \f, NUL, U+FFFF...) are dropped, or the export won't decode.
-const esc = s => s.replace(/\t/g, ' ').replace(/[^\n\r -\uD7FF\uE000-\uFFFD\u{10000}-\u{10ffff}]/gu, '').replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`);
+// finishEdit stores text already clean, so its measured width matches what's drawn.
+export const clean = s => s.replace(/[^\t\n\r -\uD7FF\uE000-\uFFFD\u{10000}-\u{10ffff}]/gu, '');
+const esc = s => clean(s).replace(/\t/g, ' ').replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`);
 const rectD = ({ l, t, r, b }) => `M${f(l)} ${f(t)}H${f(r)}V${f(b)}H${f(l)}Z`;
 const path = pts => 'M' + (pts.length > 1 ? pts : [pts[0], pts[0]]).map(([x, y]) => `${f(x)} ${f(y)}`).join('L');
 

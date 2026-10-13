@@ -38,7 +38,7 @@ assert.strictEqual(quietRow(data.subarray(2 * W * 4), W, 3), 0); // no blank row
   globalThis.OffscreenCanvas = prev;
 }
 // Markup geometry and serialization.
-const { dragEdges, bounds, move, resize, toSvg, snap, nextSize } = await import('./src/markup.js');
+const { dragEdges, bounds, move, resize, toSvg, snap, nextSize, clean } = await import('./src/markup.js');
 assert.deepStrictEqual(snap([0, 0], [10, 2]).map(Math.round), [10, 0]); // near-horizontal -> horizontal
 assert.deepStrictEqual(snap([0, 0], [-1, -10]).map(Math.round), [0, -10]); // near-vertical -> vertical
 assert.deepStrictEqual(snap([0, 0], [9, 11]).map(v => Math.round(v * 10)), [100, 100]); // diagonal, same length
@@ -324,7 +324,7 @@ globalThis.document = { querySelector: () => null }; // no Save menu open
 {
   const src = (await import('node:fs')).readFileSync('./src/editor.js', 'utf8').match(/function finishEdit[\s\S]*?\n}/)[0];
   const shapes = [{ type: 'callout', size: 10, x: 60, y: 60, text: '', em: 0, tip: [100, 100] }], measure = { measureText: l => ({ width: l.length * 60 }) };
-  const run = (shapes, value) => new Function('shapes', 'measure', 'bounds', 'commit', 'edit', 'off', `let editing = 0, cur = 0; ${src}; finishEdit();`)(shapes, measure, bounds, () => {}, { value }, { x: 0, y: 0 });
+  const run = (shapes, value) => new Function('shapes', 'measure', 'bounds', 'clean', 'commit', 'edit', 'off', `let editing = 0, cur = 0; ${src}; finishEdit();`)(shapes, measure, bounds, clean, () => {}, { value }, { x: 0, y: 0 });
   run(shapes, 'abcdefgh\nx');
   const b = bounds(shapes[0]);
   assert.ok(b.r <= 100 && b.b <= 100, 'callout box covers its own point');
@@ -332,6 +332,10 @@ globalThis.document = { querySelector: () => null }; // no Save menu open
   const edge = [{ type: 'callout', size: 10, x: 5, y: 5, text: '', em: 0, tip: [300, 300] }];
   run(edge, 'abcdefghijklmnop\nx\ny');
   assert.ok(edge[0].x >= 0 && edge[0].y >= 0, 'callout pushed off the image edge');
+  // Pasted \f and other XML-illegal characters are dropped from the drawn text, so the stored text and its width drop them too.
+  const ff = [{ type: 'callout', size: 10, x: 0, y: 0, text: '', em: 0, tip: [0, 0] }];
+  run(ff, 'ab\f\f\fcd\u0000');
+  assert.strictEqual(ff[0].em, 2.4, 'callout box measured stripped characters the export drops');
 }
 // Editing a text whose top is under the fixed header scrolls it clear of the header.
 {

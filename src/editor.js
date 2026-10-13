@@ -1,5 +1,5 @@
 import { canvasToPdf } from './pdf.js';
-import { toSvg, bounds, handles, move, resize, dragEdges, snap, nextSize, LH, PAD } from './markup.js';
+import { toSvg, bounds, handles, move, resize, dragEdges, snap, nextSize, clean, LH, PAD } from './markup.js';
 
 const $ = id => document.getElementById(id);
 
@@ -369,7 +369,7 @@ function startEdit(i) {
 // Click away or Esc keeps the text; emptied text removes its shape.
 function finishEdit() {
   if (editing == null) return;
-  const i = editing, text = edit.value.trimEnd();
+  const i = editing, text = clean(edit.value).trimEnd();
   editing = null;
   edit.hidden = true;
   const was = shapes[i];
