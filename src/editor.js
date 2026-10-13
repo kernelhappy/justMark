@@ -1,5 +1,5 @@
 import { canvasToPdf } from './pdf.js';
-import { toSvg, bounds, handles, move, resize, dragEdges, snap, nextSize, clean, isReload, editBox, LH, PAD } from './markup.js';
+import { toSvg, bounds, handles, move, resize, dragEdges, snap, nextSize, clean, isReload, editBox, LH, PAD, clearScroll } from './markup.js';
 
 const $ = id => document.getElementById(id);
 
@@ -365,9 +365,10 @@ function startEdit(i) {
   edit.hidden = false;
   render();
   edit.focus();
-  // focus() won't scroll an editor that is in the viewport but under the fixed header.
-  const under = header.offsetHeight - edit.getBoundingClientRect().top;
-  if (under > 0) scrollBy(0, -under);
+  // focus() won't scroll an editor that is in the viewport but under the fixed header or bottom dock.
+  const r = edit.getBoundingClientRect(), dock = $('props').getBoundingClientRect();
+  const dy = clearScroll(r.top, r.bottom, header.offsetHeight, dock.height ? dock.top : innerHeight);
+  if (dy) scrollBy(0, dy);
 }
 // Click away or Esc keeps the text; emptied text removes its shape.
 function finishEdit() {

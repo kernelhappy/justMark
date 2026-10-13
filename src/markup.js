@@ -133,3 +133,5 @@ export function editBox(s, b, off, W, H, p) {
   if (s.tip && b.t + b.b < 2 * s.tip[1]) Object.assign(e, { top: '', bottom: pv(off.y + H - b.b + p), maxHeight: pv(b.b - p - off.y) });
   return e;
 }
+// Scroll needed to bring a box (viewport top/bottom) clear of the fixed header (above `hi`) and bottom dock (below `lo`); the top wins.
+export const clearScroll = (top, bottom, hi, lo) => top < hi ? top - hi : Math.max(0, Math.min(bottom - lo, top - hi));

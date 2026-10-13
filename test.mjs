@@ -383,8 +383,9 @@ globalThis.isReload = (await import('./src/markup.js')).isReload; // editor.js i
 {
   const src = (await import('node:fs')).readFileSync('./src/editor.js', 'utf8').match(/function startEdit[\s\S]*?\n}/)[0];
   let dy = 0;
-  const edit = { focus() {}, getBoundingClientRect: () => ({ top: 30 }) };
-  new Function('shapes', 'edit', 'render', 'header', 'scrollBy', `let editing, cur; ${src}; startEdit(0);`)([{ text: 'a' }], edit, () => {}, { offsetHeight: 50 }, (x, y) => { dy += y; });
+  const edit = { focus() {}, getBoundingClientRect: () => ({ top: 30, bottom: 60 }) };
+  const { clearScroll } = await import('./src/markup.js'), $ = () => ({ getBoundingClientRect: () => ({ top: 500, height: 40 }) });
+  new Function('shapes', 'edit', 'render', 'header', 'scrollBy', '$', 'clearScroll', `let editing, cur; ${src}; startEdit(0);`)([{ text: 'a' }], edit, () => {}, { offsetHeight: 50 }, (x, y) => { dy += y; }, $, clearScroll);
   assert.strictEqual(dy, -20, 'startEdit scrolls the editor out from under the header');
 }
 // Single-letter tool keys click the button whose data-key matches; other keys and Ctrl+letter don't.
@@ -520,4 +521,12 @@ for (const a of JSON.parse((await import('node:fs')).readFileSync('./src-tauri/t
   const e = editBox(t, bounds(t), { x: 0, y: 0 }, 1000, 600, 0);
   assert.strictEqual(e.maxWidth, '3%', 'edit box may grow past the right image edge');
   assert.strictEqual(e.maxHeight, '3.3333333333333335%', 'edit box may grow past the bottom image edge');
+}
+// clearScroll (bughunt editor-r4-2): an editor under the bottom dock scrolls up into view; the header still wins.
+{
+  const { clearScroll } = await import('./src/markup.js');
+  assert.strictEqual(clearScroll(500, 540, 60, 520), 20); // under the dock -> scroll down 20
+  assert.strictEqual(clearScroll(40, 80, 60, 520), -20); // under the header -> scroll up
+  assert.strictEqual(clearScroll(100, 140, 60, 520), 0);
+  assert.strictEqual(clearScroll(60, 600, 60, 520), 0); // taller than the gap: keep the top visible
 }
