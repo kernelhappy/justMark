@@ -76,6 +76,21 @@ fn second_launch_paths_resolve_against_its_cwd() {
     assert_eq!(from_cwd(r"C:\shots", r"D:\b.png".into()), PathBuf::from(r"D:\b.png"));
 }
 
+#[test]
+fn a_window_the_page_never_readied_is_shown_anyway() {
+    let shown = std::cell::Cell::new(0);
+    show_if_stuck(Ok::<_, ()>(false), || shown.set(shown.get() + 1));
+    show_if_stuck(Ok::<_, ()>(true), || shown.set(shown.get() + 1));
+    show_if_stuck(Err(()), || shown.set(shown.get() + 1)); // already closed
+    assert_eq!(shown.get(), 1);
+}
+
+fn show_if_stuck<E>(visible: Result<bool, E>, show: impl FnOnce()) {
+    if let Ok(false) = visible {
+        show();
+    }
+}
+
 fn open(app: &AppHandle, path: PathBuf, t0: Instant, from_watcher: bool) {
     static N: AtomicUsize = AtomicUsize::new(0);
     let label = format!("shot{}", N.fetch_add(1, Ordering::Relaxed));
@@ -91,7 +106,15 @@ fn open(app: &AppHandle, path: PathBuf, t0: Instant, from_watcher: bool) {
         .visible(false)
         .build();
     match built {
-        Ok(_) => eprintln!("{label} window built {:?}", t0.elapsed()),
+        Ok(w) => {
+            eprintln!("{label} window built {:?}", t0.elapsed());
+            // If the page dies before calling ready (script error, failed navigation), show it anyway so it can be closed,
+            // rather than leaving a hidden window and its WebView2 processes alive until Quit.
+            std::thread::spawn(move || {
+                sleep(Duration::from_secs(10));
+                show_if_stuck(w.is_visible().map_err(|_| ()), || drop(w.show()));
+            });
+        }
         Err(e) => eprintln!("{label} window failed: {e}"),
     }
 }
