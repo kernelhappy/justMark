@@ -146,6 +146,14 @@ globalThis.isReload = (await import('./src/markup.js')).isReload; // editor.js i
   assert.strictEqual(fin, 0, 'Esc during IME composition ended the edit');
   m({ key: 'Escape', target: edit });
   assert.strictEqual(fin, 1);
+  // Esc with the Save menu open only closes the menu: it must not also end a crop or a text edit (editor-r1-5+editor-r2-2).
+  globalThis.document = { querySelector: q => q === ':popover-open' ? {} : null };
+  let ended = 0; globalThis.endCrop = () => ended++;
+  const p = new Function('run', 'finishEdit', 'cropping', 'marking', 'remove', 'edit', 'go', 'render', 'stage', `let gesture = false, cur = 0, tool = 'select', onkeydown; ${src.match(/onkeydown = e => \{[\s\S]*?\n\};/)[0]} return onkeydown;`);
+  p(() => {}, () => {}, () => true, () => true, () => {}, edit, () => {}, () => {}, { dataset: {} })({ key: 'Escape', target: {} });
+  p(() => {}, () => fin++, () => false, () => true, () => {}, edit, () => {}, () => {}, { dataset: {} })({ key: 'Escape', target: edit });
+  assert.deepStrictEqual([ended, fin], [0, 1], 'Esc closing the Save menu also ended the crop / text edit');
+  globalThis.document = { querySelector: () => null };
 }
 // Fit in a window shorter than the header must not go to a zero or negative scale.
 {

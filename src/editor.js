@@ -502,6 +502,7 @@ onkeydown = e => {
   }
   if (isReload(e)) return e.preventDefault();
   if (gesture) return;
+  if (e.key === 'Escape' && document.querySelector(':popover-open')) return; // the Save menu closes itself; this Esc is spent
   if (cropping()) {
     if (e.key === 'Escape') endCrop();
     if (e.key === 'Enter') { e.preventDefault(); applyCrop(); }
@@ -519,7 +520,6 @@ onkeydown = e => {
     if (!e.repeat) run(k === 's' ? 'save' : 'copy'); // a held Ctrl+S would queue a second Save dialog
   } else if ((e.key === 'Delete' || e.key === 'Backspace') && e.target.tagName !== 'INPUT') remove();
   else if (e.key === 'Escape') {
-    if (document.querySelector(':popover-open')) return; // the Save menu closes itself
     // Esc steps back to Select, then closes the editor (the snip is already on the clipboard).
     if (tool === 'select' && cur == null) return closeEditor();
     cur = null;
