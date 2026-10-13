@@ -64,7 +64,7 @@
   - Polygon closes three ways (double-click, Enter, first point); key G (P is Pen).
   - No separate redaction: exports are flattened, so any opaque markup covers (user). A real redaction
     tool only matters if PDF export ever keeps live markup objects (WISHLIST).
-  - Fill patterns: user's list plus `\\`, `×××`, checkerboard; skipped zigzag/waves (busy when dense).
+  - Fill patterns: user's list plus `\\\`, `×××`, checkerboard; skipped zigzag/waves (busy when dense).
     Not on the callout box (hatching under text). Fill is a split button like Save, not a dock strip.
   - See-through = 40% opacity like the highlighter, not multiply: multiply vanishes on dark screenshots and
     can't blend with the capture while the ink is one SVG drawn over it.
