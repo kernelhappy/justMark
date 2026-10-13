@@ -31,13 +31,14 @@ fn is_image(p: &Path) -> bool {
 /// Snipping Tool creates the file before it has finished writing it: wait for the PNG or JPEG end marker.
 fn wait_complete(p: &Path) {
     let end = Instant::now() + Duration::from_secs(5);
+    let png = p.extension().is_some_and(|e| e.eq_ignore_ascii_case("png"));
     while Instant::now() < end {
         let mut tail = [0u8; 8];
         let read = File::open(p).and_then(|mut f| {
             f.seek(SeekFrom::End(-8))?;
             f.read_exact(&mut tail)
         });
-        if read.is_ok() && (tail == *b"IEND\xAEB`\x82" || tail[6..] == [0xFF, 0xD9]) {
+        if read.is_ok() && (if png { tail == *b"IEND\xAEB`\x82" } else { tail[6..] == [0xFF, 0xD9] }) {
             return;
         }
         sleep(Duration::from_millis(20));
@@ -227,7 +228,7 @@ fn screenshots_dir(known: Option<PathBuf>, pictures: Option<PathBuf>) -> Option<
 #[test]
 fn wait_complete_waits_for_the_end_marker() {
     let p = std::env::temp_dir().join("snarkymark-wait-test.png");
-    std::fs::write(&p, b"\x89PNG partial").unwrap();
+    std::fs::write(&p, b"\x89PNG partial\xFF\xD9").unwrap(); // IDAT bytes can end in the JPEG marker
     let (p2, t) = (p.clone(), Instant::now());
     let writer = std::thread::spawn(move || {
         sleep(Duration::from_millis(150));
