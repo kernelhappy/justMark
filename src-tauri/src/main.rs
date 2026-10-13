@@ -1,5 +1,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+/// Timing/diagnostic line to stderr. Unlike eprintln, a dead stderr (closed pipe) is ignored instead of panicking.
+macro_rules! log {
+    ($($t:tt)*) => {{ use std::io::Write; let _ = writeln!(std::io::stderr(), $($t)*); }};
+}
+
 use notify::{EventKind, RecursiveMode, Watcher};
 use tauri_plugin_autostart::ManagerExt;
 use std::{
@@ -108,7 +113,7 @@ fn open(app: &AppHandle, path: PathBuf, t0: Instant, from_watcher: bool) {
     });
     match built {
         Ok(w) => {
-            eprintln!("{label} window built {:?}", t0.elapsed());
+            log!("{label} window built {:?}", t0.elapsed());
             // If the page dies before calling ready (script error, failed navigation), show it anyway so it can be closed,
             // rather than leaving a hidden window and its WebView2 processes alive until Quit.
             std::thread::spawn(move || {
@@ -116,7 +121,7 @@ fn open(app: &AppHandle, path: PathBuf, t0: Instant, from_watcher: bool) {
                 show_if_stuck(w.is_visible().map_err(|_| ()), || drop(w.show()));
             });
         }
-        Err(e) => eprintln!("{label} window failed: {e}"),
+        Err(e) => log!("{label} window failed: {e}"),
     }
 }
 
@@ -257,7 +262,7 @@ fn fit_shows_the_capture_at_actual_size_on_another_dpi() {
 #[tauri::command]
 fn ready(w: WebviewWindow, shots: State<Shots>, img: (f64, f64), chrome: (f64, f64), min: (f64, f64)) {
     if let Some((_, t0, _)) = shots.0.lock().unwrap().get(w.label()) {
-        eprintln!("{} ready {:?}", w.label(), t0.elapsed());
+        log!("{} ready {:?}", w.label(), t0.elapsed());
     }
     let cursor = w.cursor_position().unwrap_or_default();
     let mon = w.monitor_from_point(cursor.x, cursor.y).ok().flatten().or_else(|| w.primary_monitor().ok().flatten());
@@ -326,7 +331,7 @@ fn watch_images(
             Some(now) if now != dir => {
                 let _ = watcher.unwatch(&dir);
                 if let Err(e) = watcher.watch(&now, RecursiveMode::NonRecursive) {
-                    eprintln!("not watching {}: {e}", now.display());
+                    log!("not watching {}: {e}", now.display());
                 }
                 dir = now;
             }
@@ -425,7 +430,7 @@ fn main() {
                 screenshots_dir(get_known_folder_path(KnownFolder::Screenshots), get_known_folder_path(KnownFolder::Pictures))
             };
             if let Err(e) = watch_images(resolve, Duration::from_secs(3), move |p| open(&h, p, Instant::now(), true)) {
-                eprintln!("not watching Screenshots: {e}");
+                log!("not watching Screenshots: {e}");
             }
             Ok(())
         })
@@ -452,4 +457,22 @@ fn screenshots_dir_is_created_when_missing() {
 fn launch_paths_need_not_be_unicode() {
     // std::env::args panics on a path with an unpaired surrogate; libtest reads args too, so check the source.
     assert!(!include_str!("main.rs").contains(concat!("env::args", "()")));
+}
+
+#[test]
+fn logging_survives_a_closed_stderr_pipe() {
+    // Child: log into a pipe whose reader is gone. Parent: re-run just this test that way and expect success.
+    if std::env::var_os("SM_LOG_CHILD").is_some() {
+        sleep(Duration::from_millis(300));
+        for _ in 0..4 { log!("timing line"); }
+        return;
+    }
+    let mut child = std::process::Command::new(std::env::current_exe().unwrap())
+        .args(["logging_survives_a_closed_stderr_pipe", "--exact", "--nocapture"])
+        .env("SM_LOG_CHILD", "1")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped())
+        .spawn().unwrap();
+    drop(child.stderr.take());
+    assert!(child.wait().unwrap().success());
 }
