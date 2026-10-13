@@ -71,6 +71,8 @@ const ACTIONS = {
     const url = URL.createObjectURL(await encode('png')), p = $('printshot');
     p.src = url;
     await p.decode();
+    // Size from this image, not body's --actual: a crop can swap #shot (and --actual) while the encode runs.
+    p.style.setProperty('--actual', p.naturalWidth / devicePixelRatio + 'px');
     document.body.classList.add('burned');
     // print() blocks until the dialog closes, and returns at once when blocked by policy or throttled (no afterprint),
     // so clean up on return: a lingering .burned would make a later menu Print use this stale image.

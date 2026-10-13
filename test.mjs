@@ -235,11 +235,13 @@ globalThis.document = { querySelector: () => null }; // no Save menu open
 // Print: if print() returns without firing afterprint (policy-blocked, throttled), .burned must not linger for menu Print.
 {
   const src = (await import('node:fs')).readFileSync('./src/editor.js', 'utf8');
-  const cls = new Set(), p = { decode: async () => {}, removeAttribute() {} };
-  const act = new Function('$', 'encode', 'document', 'URL', 'addEventListener', 'print',
+  const cls = new Set(), props = {}, p = { naturalWidth: 3840, style: { setProperty: (k, v) => { props[k] = v; } }, decode: async () => {}, removeAttribute() {} };
+  // export-r2-2: a crop swapping #shot mid-encode resets body's --actual, so the burned image must carry its own width.
+  const act = new Function('$', 'encode', 'document', 'URL', 'addEventListener', 'print', 'devicePixelRatio',
     `return {${src.match(/async print\(\) \{[\s\S]*?\n  \},/)[0]}}`)(
     () => p, async () => ({}), { body: { classList: { add: c => cls.add(c), remove: c => cls.delete(c) } } },
-    { createObjectURL: () => 'blob:x', revokeObjectURL() {} }, () => {}, () => {});
+    { createObjectURL: () => 'blob:x', revokeObjectURL() {} }, () => {},
+    () => assert.strictEqual(props['--actual'], '1920px', 'printshot sized from --actual, not from the encoded image'), 2);
   await act.print();
   assert.ok(!cls.has('burned'), 'body.burned left set after a print() that never fired afterprint');
 }
