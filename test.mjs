@@ -167,6 +167,17 @@ globalThis.isReload = (await import('./src/markup.js')).isReload; // editor.js i
   assert.deepStrictEqual([ended, fin], [0, 1], 'Esc closing the Save menu also ended the crop / text edit');
   globalThis.document = { querySelector: () => null };
 }
+{
+  const src = (await import('node:fs')).readFileSync('./src/editor.js', 'utf8'), edit = {};
+  // editor-r2-5: a held Esc steps back to Select but its auto-repeat must not close the editor.
+  let closed = 0; globalThis.closeEditor = () => closed++;
+  const held = new Function('run', 'finishEdit', 'cropping', 'marking', 'remove', 'edit', 'go', 'render', 'stage', `let gesture = false, cur = null, tool = 'rect', onkeydown; ${src.match(/onkeydown = e => \{[\s\S]*?\n\};/)[0]} return onkeydown;`)(
+    () => {}, () => {}, () => false, () => true, () => {}, edit, () => {}, () => {}, { dataset: {} });
+  held({ key: 'Escape', target: {} }); held({ key: 'Escape', target: {}, repeat: true });
+  assert.strictEqual(closed, 0, 'held Esc closed the editor');
+  held({ key: 'Escape', target: {} });
+  assert.strictEqual(closed, 1);
+}
 // Fit in a window shorter than the header must not go to a zero or negative scale.
 {
   const src = (await import('node:fs')).readFileSync('./src/editor.js', 'utf8');

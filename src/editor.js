@@ -534,7 +534,7 @@ onkeydown = e => {
   } else if ((e.key === 'Delete' || e.key === 'Backspace') && e.target.tagName !== 'INPUT') remove();
   else if (e.key === 'Escape') {
     // Esc steps back to Select, then closes the editor (the snip is already on the clipboard).
-    if (tool === 'select' && cur == null) return closeEditor();
+    if (tool === 'select' && cur == null) return e.repeat || closeEditor(); // a held Esc steps back but doesn't also close
     cur = null;
     tool = stage.dataset.tool = 'select';
     render();
