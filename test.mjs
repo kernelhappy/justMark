@@ -423,3 +423,9 @@ console.log('ok');
 // File-association ProgID must be namespaced: NSIS uses `name` as the HKCU\Software\Classes key and uninstall deletes it.
 for (const a of JSON.parse((await import('node:fs')).readFileSync('./src-tauri/tauri.conf.json', 'utf8')).bundle.fileAssociations)
   assert.match(a.name, /^snarkymark\./, 'fileAssociations name must be namespaced');
+// Zoom pill, Save menu and status toast presses must not blur an open text editor (would delete an empty new text).
+{
+  const src = (await import('node:fs')).readFileSync('./src/editor.js', 'utf8');
+  const line = src.match(/.*\.onmousedown = e => e\.preventDefault\(\);/)[0];
+  for (const id of ['tools', 'props', 'zoombar', 'savemenu', 'status']) assert(line.includes(`$('${id}')`), `${id} mousedown guard`);
+}

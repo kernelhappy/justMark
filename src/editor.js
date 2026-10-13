@@ -326,7 +326,7 @@ function remove() {
 // No browser menu (Back, Reload, Save as…); the text editor keeps its cut/copy/paste menu.
 oncontextmenu = e => e.target === edit || e.preventDefault();
 // A press must not blur an open text editor: finishEdit would delete an empty new text before the click lands.
-$('tools').onmousedown = $('props').onmousedown = e => e.preventDefault();
+$('tools').onmousedown = $('props').onmousedown = $('zoombar').onmousedown = $('savemenu').onmousedown = $('status').onmousedown = e => e.preventDefault();
 $('tools').onclick = $('props').onclick = ({ target }) => {
   if (gesture) return;
   const d = target.closest('button')?.dataset ?? {}, s = shapes[cur];
