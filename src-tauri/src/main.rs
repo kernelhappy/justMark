@@ -208,6 +208,65 @@ fn wait_complete_waits_for_the_end_marker() {
     let _ = std::fs::remove_file(p);
 }
 
+/// Calls `on_image` for each image created in the folder `resolve` names, for the life of the process.
+fn watch_images(
+    resolve: impl Fn() -> Option<PathBuf> + Send + 'static,
+    every: Duration,
+    on_image: impl Fn(PathBuf) + Send + 'static,
+) -> notify::Result<()> {
+    let mut watcher = notify::recommended_watcher(move |r: notify::Result<notify::Event>| {
+        let Ok(e) = r else { return };
+        if !matches!(e.kind, EventKind::Create(_)) {
+            return;
+        }
+        for p in e.paths.into_iter().filter(|p| is_image(p)) {
+            on_image(p);
+        }
+    })?;
+    let mut dir = resolve().ok_or_else(|| notify::Error::generic("no Screenshots folder"))?;
+    watcher.watch(&dir, RecursiveMode::NonRecursive)?;
+    // The folder can move while the tray runs (Properties > Location, OneDrive backup of Pictures), and notify
+    // drops a deleted folder's watch without an event: re-resolve it now and then and watch the new place.
+    std::thread::spawn(move || loop {
+        sleep(every);
+        match resolve() {
+            Some(now) if now != dir => {
+                let _ = watcher.unwatch(&dir);
+                if let Err(e) = watcher.watch(&now, RecursiveMode::NonRecursive) {
+                    eprintln!("not watching {}: {e}", now.display());
+                }
+                dir = now;
+            }
+            _ => {}
+        }
+    });
+    Ok(())
+}
+
+#[test]
+fn watch_follows_the_folder_when_it_moves() {
+    let base = std::env::temp_dir().join("snarkymark-move-test");
+    let _ = std::fs::remove_dir_all(&base);
+    let (a, b) = (base.join("a"), base.join("b"));
+    std::fs::create_dir_all(&a).unwrap();
+    std::fs::create_dir_all(&b).unwrap();
+    let cur = std::sync::Arc::new(Mutex::new(a.clone()));
+    let c = cur.clone();
+    let (tx, rx) = std::sync::mpsc::channel();
+    let tx = Mutex::new(tx);
+    watch_images(move || Some(c.lock().unwrap().clone()), Duration::from_millis(50), move |p| {
+        let _ = tx.lock().unwrap().send(p);
+    })
+    .unwrap();
+    std::fs::write(a.join("1.png"), b"x").unwrap();
+    assert!(rx.recv_timeout(Duration::from_secs(2)).is_ok_and(|p| p.ends_with("1.png")));
+    *cur.lock().unwrap() = b.clone();
+    sleep(Duration::from_millis(300));
+    std::fs::write(b.join("2.png"), b"x").unwrap();
+    assert!(rx.recv_timeout(Duration::from_secs(2)).is_ok_and(|p| p.ends_with("2.png")), "new folder not watched");
+    let _ = std::fs::remove_dir_all(base);
+}
+
 fn main() {
     let app = tauri::Builder::default()
         // A second launch (e.g. "Open with") hands its files to the running tray instance.
@@ -251,24 +310,11 @@ fn main() {
 
             // Snipping Tool's auto-save lands here. Only creations count (see `save` for why that matters).
             // Not being able to watch it must not cost the tray and Open with.
-            let watch = move || -> Result<(), Box<dyn std::error::Error>> {
+            let resolve = || {
                 use known_folders::{get_known_folder_path, KnownFolder};
-                let dir = screenshots_dir(get_known_folder_path(KnownFolder::Screenshots), get_known_folder_path(KnownFolder::Pictures))
-                    .ok_or("no Screenshots folder")?;
-                let mut watcher = notify::recommended_watcher(move |r: notify::Result<notify::Event>| {
-                    let Ok(e) = r else { return };
-                    if !matches!(e.kind, EventKind::Create(_)) {
-                        return;
-                    }
-                    for p in e.paths.into_iter().filter(|p| is_image(p)) {
-                        open(&h, p, Instant::now(), true);
-                    }
-                })?;
-                watcher.watch(&dir, RecursiveMode::NonRecursive)?;
-                std::mem::forget(watcher); // watches for the life of the process
-                Ok(())
+                screenshots_dir(get_known_folder_path(KnownFolder::Screenshots), get_known_folder_path(KnownFolder::Pictures))
             };
-            if let Err(e) = watch() {
+            if let Err(e) = watch_images(resolve, Duration::from_secs(3), move |p| open(&h, p, Instant::now(), true)) {
                 eprintln!("not watching Screenshots: {e}");
             }
             Ok(())
