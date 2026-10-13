@@ -426,7 +426,8 @@ function markDown(e) {
       return;
     }
     const from = shapes[i = cur];
-    upd = (ev, dx, dy) => move(from, dx, dy);
+    let moving = false; // a click with hand jitter is not a move
+    upd = (ev, dx, dy) => (moving ||= Math.abs(dx) >= 3 * k || Math.abs(dy) >= 3 * k) ? move(from, dx, dy) : from;
   } else if (tool === 'text') {
     stage.onpointermove = null;
     // On release, so the press's own focus handling can't blur the new editor.

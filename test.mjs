@@ -449,3 +449,16 @@ for (const a of JSON.parse((await import('node:fs')).readFileSync('./src-tauri/t
   const line = src.match(/.*\.onmousedown = e => e\.preventDefault\(\);/)[0];
   for (const id of ['tools', 'props', 'zoombar', 'savemenu', 'status']) assert(line.includes(`$('${id}')`), `${id} mousedown guard`);
 }
+// A Select click with sub-threshold jitter must not move the shape (no undo step, no dirty state).
+{
+  const src = (await import('node:fs')).readFileSync('./src/editor.js', 'utf8');
+  const stage = {}, shapes = [{ type: 'rect', l: 0, t: 0, r: 50, b: 50 }];
+  const hit = { dataset: { i: '0' } };
+  const md = new Function('stage', 'shapes', 'move', 'resize', 'snap', 'bounds', `let cur = null, tool = 'select', lastDown = 0, upd; const shot = { naturalWidth: 100, clientWidth: 100 };
+    const render = () => {}, commit = () => {}, atInk = e => [e.x, e.y]; ${src.match(/function markDown\(e\) \{[\s\S]*?\n\}/)[0]} return markDown;`)(stage, shapes, move, resize, snap, bounds);
+  md({ x: 10, y: 10, timeStamp: 0, target: { closest: s => s === '#pick' ? null : hit } });
+  stage.onpointermove({ x: 11, y: 10 });
+  assert.strictEqual(shapes[0].l, 0, '1px jitter moved the selected shape');
+  stage.onpointermove({ x: 20, y: 10 });
+  assert.strictEqual(shapes[0].l, 10, 'a real drag should move it');
+}
