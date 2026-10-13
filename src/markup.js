@@ -123,3 +123,13 @@ function draw(s, pad = 0, dpr = 1) {
 export const toSvg = (shapes, v, pad = 0, dpr = 1) =>
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${v.x} ${v.y} ${v.w} ${v.h}" width="${v.w}" height="${v.h}">` +
   shapes.map((s, i) => `<g data-i="${i}">${draw(s, 0, dpr)}${pad ? `<g opacity="0">${draw(s, pad, dpr)}</g>` : ''}</g>`).join('') + '</svg>';
+
+// Where the text editing box sits, as % of the image, capped so it never grows past the image edge (the committed text is clipped there).
+// A callout left of or above its point grows away from it while typing, as finishEdit will place it.
+export function editBox(s, b, off, W, H, p) {
+  const l = s.x + p - off.x, t = s.y + p - off.y, pc = v => v / W * 100 + '%', pv = v => v / H * 100 + '%';
+  const e = { left: pc(l), top: pv(t), right: '', bottom: '', maxWidth: pc(W - l), maxHeight: pv(H - t) };
+  if (s.tip && b.l + b.r < 2 * s.tip[0]) Object.assign(e, { left: '', right: pc(off.x + W - b.r + p), maxWidth: pc(b.r - p - off.x) });
+  if (s.tip && b.t + b.b < 2 * s.tip[1]) Object.assign(e, { top: '', bottom: pv(off.y + H - b.b + p), maxHeight: pv(b.b - p - off.y) });
+  return e;
+}

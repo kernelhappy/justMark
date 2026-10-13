@@ -1,5 +1,5 @@
 import { canvasToPdf } from './pdf.js';
-import { toSvg, bounds, handles, move, resize, dragEdges, snap, nextSize, clean, isReload, LH, PAD } from './markup.js';
+import { toSvg, bounds, handles, move, resize, dragEdges, snap, nextSize, clean, isReload, editBox, LH, PAD } from './markup.js';
 
 const $ = id => document.getElementById(id);
 
@@ -289,10 +289,7 @@ function render() {
   if (editing != null) {
     const s = shapes[editing], k = shot.clientWidth / W, p = s.tip ? PAD * s.size : 0, H = shot.naturalHeight, b = bounds(s);
     ink.querySelector(`[data-i="${editing}"]`).style.visibility = 'hidden';
-    Object.assign(edit.style, { left: (s.x + p - off.x) / W * 100 + '%', top: (s.y + p - off.y) / shot.naturalHeight * 100 + '%', right: '', bottom: '', font: `600 ${s.size * k}px/${LH} system-ui, sans-serif`, color: s.tip ? '#111' : s.c, background: s.tip || !['#ffffff', '#fdd835'].includes(s.c) ? '' : '#000c' });
-    // A callout left of or above its point grows away from it while typing, as finishEdit will place it.
-    if (s.tip && b.l + b.r < 2 * s.tip[0]) Object.assign(edit.style, { left: '', right: (off.x + W - b.r + p) / W * 100 + '%' });
-    if (s.tip && b.t + b.b < 2 * s.tip[1]) Object.assign(edit.style, { top: '', bottom: (off.y + H - b.b + p) / H * 100 + '%' });
+    Object.assign(edit.style, editBox(s, b, off, W, H, p), { font: `600 ${s.size * k}px/${LH} system-ui, sans-serif`, color: s.tip ? '#111' : s.c, background: s.tip || !['#ffffff', '#fdd835'].includes(s.c) ? '' : '#000c' });
   }
   const now = s ?? styleOf(tool);
   for (const b of document.querySelectorAll('[data-tool], [data-c], [data-w], [data-fill], [data-cmd]')) {

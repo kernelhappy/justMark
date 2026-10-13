@@ -38,7 +38,7 @@ assert.strictEqual(quietRow(data.subarray(2 * W * 4), W, 3), 0); // no blank row
   globalThis.OffscreenCanvas = prev;
 }
 // Markup geometry and serialization.
-const { dragEdges, bounds, move, resize, toSvg, snap, nextSize, clean } = await import('./src/markup.js');
+const { dragEdges, bounds, move, resize, toSvg, snap, nextSize, clean, editBox } = await import('./src/markup.js');
 assert.deepStrictEqual(snap([0, 0], [10, 2]).map(Math.round), [10, 0]); // near-horizontal -> horizontal
 assert.deepStrictEqual(snap([0, 0], [-1, -10]).map(Math.round), [0, -10]); // near-vertical -> vertical
 assert.deepStrictEqual(snap([0, 0], [9, 11]).map(v => Math.round(v * 10)), [100, 100]); // diagonal, same length
@@ -348,7 +348,7 @@ globalThis.isReload = (await import('./src/markup.js')).isReload; // editor.js i
 {
   const src = (await import('node:fs')).readFileSync('./src/editor.js', 'utf8');
   const line = src.match(/Object\.assign\(edit\.style, .*/)[0];
-  const run = s => { const edit = { style: {} }; new Function('edit', 's', 'k', 'p', 'W', 'off', 'shot', 'LH', line)(edit, s, 1, 0, 100, { x: 0, y: 0 }, { naturalHeight: 100 }, 1.2); return edit.style; };
+  const run = s => { const edit = { style: {} }; new Function('edit', 's', 'k', 'p', 'W', 'H', 'b', 'off', 'shot', 'LH', 'editBox', line)(edit, s, 1, 0, 100, 100, {}, { x: 0, y: 0 }, { naturalHeight: 100 }, 1.2, editBox); return edit.style; };
   assert.strictEqual(run({ x: 0, y: 0, size: 16, c: '#ffffff' }).background, '#000c', 'white text gets a dark edit background');
   assert.strictEqual(run({ x: 0, y: 0, size: 16, c: '#fdd835' }).background, '#000c', 'yellow text gets a dark edit background');
   assert.notStrictEqual(run({ x: 0, y: 0, size: 16, c: '#e53935' }).background, '#000c', 'red keeps the default light background');
@@ -513,4 +513,11 @@ for (const a of JSON.parse((await import('node:fs')).readFileSync('./src-tauri/t
   eval(src.match(/stage\.onpointerdown = e => \{[\s\S]*?\n\};/)[0]);
   stage.onpointerdown({ button: 0, target: {}, preventDefault() {}, pointerId: 1 });
   assert.deepStrictEqual([hidden, drawn], [true, false], 'stage press with Save menu open drew instead of closing the menu');
+}
+
+{ // editor-r3-1: the text editing box must not run past the image edge, where the committed text is clipped
+  const t = { x: 970, y: 580, size: 20, c: '#e53935', text: 'long line' };
+  const e = editBox(t, bounds(t), { x: 0, y: 0 }, 1000, 600, 0);
+  assert.strictEqual(e.maxWidth, '3%', 'edit box may grow past the right image edge');
+  assert.strictEqual(e.maxHeight, '3.3333333333333335%', 'edit box may grow past the bottom image edge');
 }
