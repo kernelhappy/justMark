@@ -88,7 +88,7 @@ for (const [active, ends] of [['edit', false], ['body', true]]) {
 }
 // Style per tool, remembered in localStorage (screen px): restyling a selected shape sets its tool's style, not the others'.
 const SRC = (await import('node:fs')).readFileSync('./src/editor.js', 'utf8');
-const STYLE_SRC = [/const RED = [\s\S]*?\n\};/, /function styleOf\(t\) \{[\s\S]*?\n\}/, /function setStyle\(t, k, v\) \{[\s\S]*?\n\}/, /const styleNow = .*/].map(re => SRC.match(re)[0]).join('\n');
+const STYLE_SRC = SRC.match(/const RED = [\s\S]*?\nconst styleNow = .*/)[0]; // styles, color targets, styleNow
 // The toolbar's click handler with the style code, over fake storage; returns { click(dataset), get() }.
 const toolbar = ({ shapes = [], cur = null, editing = null, tool = 'select', dpr = 1, store = {}, edit = { value: '' }, log = [] } = {}) => {
   const tools = {};
@@ -653,4 +653,27 @@ for (const a of JSON.parse((await import('node:fs')).readFileSync('./src-tauri/t
   btn.dataset.d = '-1';
   for (let i = 0; i < 20; i++) { down({ button: 0, target: { closest: () => btn } }); btn.onpointerup(); }
   assert.strictEqual(get().w, 1, 'weight not clamped at 1');
+}
+// Color targets: Line · Fill · Text pick what the swatches color; a fill color turns a fillable shape's Fill on, none turns it off.
+{
+  const shapes = [{ type: 'rect', c: 'red', w: 4, fill: false }, { type: 'callout', c: 'red', w: 4, size: 20, fc: '#fff', tc: '#111', text: 'a', em: 1, x: 0, y: 0, tip: [50, 50] }];
+  const t = toolbar({ shapes, cur: 0 });
+  t.click({ target: 'fill' });
+  t.click({ c: 'blue' });
+  assert.deepStrictEqual([shapes[0].fc, shapes[0].fill, t.get().styleOf('rect').fc], ['blue', true, 'blue'], 'a fill color did not turn Fill on');
+  t.click({ c: 'none' });
+  assert.deepStrictEqual([shapes[0].fill, shapes[0].fc], [false, 'blue'], 'none did not turn Fill off');
+  t.click({ target: 'line' }); t.click({ c: 'green' });
+  assert.deepStrictEqual([shapes[0].c, shapes[0].fc], ['green', 'blue']);
+  const u = toolbar({ shapes, cur: 1 });
+  u.click({ target: 'text' }); u.click({ c: 'blue' });
+  u.click({ target: 'fill' }); u.click({ c: 'none' });
+  assert.deepStrictEqual([shapes[1].tc, shapes[1].fc, shapes[1].c], ['blue', null, 'red'], 'callout targets');
+  const svg = toSvg([shapes[1], { type: 'text', c: '#fff', fc: '#000', size: 10, em: 2, x: 0, y: 0, text: 'ab' }, { type: 'rect', c: 'red', w: 2, fill: true, l: 0, t: 0, r: 9, b: 9 }], { x: 0, y: 0, w: 99, h: 99 });
+  assert.match(svg, /fill="none" stroke="red"[^>]*\/><text[^>]*fill="blue"/, 'callout box none / text color');
+  assert.match(svg, /<path d="M-1\.5 0H21\.5V12\.5H-1\.5Z" fill="#000"\/><text[^>]*fill="#fff"/, 'text background');
+  assert.match(svg, /fill="red" stroke="red"/, 'a fill with no color of its own follows the line');
+  const v = toolbar({ tool: 'pen' }); // no targets: swatches color the line whatever was picked
+  v.click({ target: 'fill' }); v.click({ c: 'blue' });
+  assert.strictEqual(v.get().styleOf('pen').c, 'blue');
 }

@@ -133,6 +133,13 @@
   }
   [data-c][aria-pressed=true]::before { box-shadow: inset 0 0 0 1px #0003, 0 0 0 2px var(--solid), 0 0 0 4px var(--accent); scale: .9; }
   .wline { display: block; width: 14px; height: 3px; border-radius: 2px; background: currentColor; }
+  /* None: a struck-through empty swatch */
+  .none { --c: transparent; }
+  [data-c].none::before, .targets .none i { background: linear-gradient(to top right, transparent calc(50% - 1px), var(--danger) calc(50% - 1px) calc(50% + 1px), transparent calc(50% + 1px)); }
+  .targets { display: flex; gap: 1px; padding: 2px; margin-right: 6px; border-radius: 9px; background: var(--hover); }
+  .targets button { height: 28px; padding: 0 7px; gap: 5px; font-size: 12px; font-weight: 600; color: var(--muted); }
+  .targets [aria-pressed=true] { background: var(--solid); color: var(--text); box-shadow: 0 1px 3px #0003; }
+  .targets i { width: 12px; height: 12px; border-radius: 50%; background: var(--c); box-shadow: inset 0 0 0 1px light-dark(#0000002e, #ffffff40); }
   [data-del]:hover:not(:disabled) { color: var(--danger); background: color-mix(in srgb, var(--danger) 12%, transparent); }
   #tsize, #wval { min-width: 24px; text-align: center; font-weight: 600; font-variant-numeric: tabular-nums; }
   .aa { font-weight: 700; }
@@ -268,6 +275,11 @@
       <button id="cropapply" class="btn primary"><svg class="i"><use href="#i-check"/></svg>Apply <kbd>Enter</kbd></button>
     </div>
     <div class="g g-c">
+      <div id="targets" class="targets">
+        <button data-target="line" aria-label="Line" data-tip="&#10;Swatches color the line" class="tip-up"><i></i>Line</button>
+        <button data-target="fill" aria-label="Fill" data-tip="&#10;Swatches color the fill" class="tip-up"><i></i>Fill</button>
+        <button data-target="text" aria-label="Text" data-tip="&#10;Swatches color the text" class="tip-up"><i></i>Text</button>
+      </div>
       <button data-c="#e53935" style="--c:#e53935" aria-label="Red" data-tip="" class="tip-up"></button>
       <button data-c="#fb8c00" style="--c:#fb8c00" aria-label="Orange" data-tip="" class="tip-up"></button>
       <button data-c="#fdd835" style="--c:#fdd835" aria-label="Yellow" data-tip="" class="tip-up"></button>
@@ -275,6 +287,7 @@
       <button data-c="#1e88e5" style="--c:#1e88e5" aria-label="Blue" data-tip="" class="tip-up"></button>
       <button data-c="#000000" style="--c:#000000" aria-label="Black" data-tip="" class="tip-up"></button>
       <button data-c="#ffffff" style="--c:#ffffff" aria-label="White" data-tip="" class="tip-up"></button>
+      <button data-c="none" id="nonec" class="none tip-up" aria-label="None" data-tip=""></button>
     </div>
     <div class="g g-w">
       <span class="wline" aria-hidden="true"></span>

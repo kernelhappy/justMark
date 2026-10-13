@@ -131,7 +131,7 @@ So mouse-up → editor visible ≈ 0.6–0.8 s. Regressions past ~1 s or idle pa
 - **Covering, not redaction:** every export is flattened, so any opaque markup covers what's under it
   for good. See-through shapes and patterns don't. Fill's tooltip says "covers what's under it in every
   export" instead of naming black boxes.
-- **Color targets:** a Line · Fill · Text segmented picker before the one swatch row; swatches set the
+- **Color targets** (built): a Line · Fill · Text segmented picker before the one swatch row; swatches set the
   chosen target and the picker shows each target's color. Callout: line (border + tail), fill (box,
   today #fff), text (today #111). Text: text + optional background fill. Rect, ellipse, cloud, polygon:
   Line · Fill, fill defaulting to the line color. The Fill target adds a "none" swatch.

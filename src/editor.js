@@ -312,16 +312,26 @@ let shapes = [], hist = ['[[],null]'], step = 0, off = { x: 0, y: 0 }, tool = 's
 const RED = '#e53935', STYLES = {
   hl: { c: '#fdd835', w: 4 }, pen: { c: RED, w: 4 }, line: { c: RED, w: 4 }, arrow: { c: RED, w: 4 },
   rect: { c: RED, w: 4, fill: false }, ellipse: { c: RED, w: 4, fill: false }, cloud: { c: RED, w: 4, fill: false },
-  text: { c: RED, size: 20 }, callout: { c: RED, w: 4, size: 20 },
+  text: { c: RED, size: 20, fc: null }, callout: { c: RED, w: 4, size: 20, fc: '#fff', tc: '#111' },
 };
 function styleOf(t) {
   let s;
   try { s = JSON.parse(localStorage['style.' + t]); } catch {} // none stored yet, or storage unavailable
   return { ...STYLES[t], ...s };
 }
-function setStyle(t, k, v) {
-  try { localStorage['style.' + t] = JSON.stringify({ ...styleOf(t), [k]: v }); } catch {}
+function setStyle(t, ch) {
+  try { localStorage['style.' + t] = JSON.stringify({ ...styleOf(t), ...ch }); } catch {}
 }
+// Color targets: the style key each of the picker's Line · Fill · Text sets, per shape type. The rest only have a line color.
+// fc: a fillable shape's fill color (missing: its line color), a text's background, a callout's box. tc: a callout's text.
+const TARGETS = { rect: { line: 'c', fill: 'fc' }, ellipse: { line: 'c', fill: 'fc' }, cloud: { line: 'c', fill: 'fc' }, text: { text: 'c', fill: 'fc' }, callout: { line: 'c', fill: 'fc', text: 'tc' } };
+let colorTarget = 'line'; // the picker's pick
+// The picked target's key for a type; a type without that target gets its first.
+const keyOf = t => TARGETS[t]?.[colorTarget] ?? Object.values(TARGETS[t] ?? { line: 'c' })[0];
+// The color a target shows (null: none). A fillable shape's fill is its line color until one is picked, and none while Fill is off.
+const colorOf = (s, t, key) => key !== 'fc' ? s[key] : 'fill' in STYLES[t] ? (s.fill ? s.fc ?? s.c : null) : s.fc ?? null;
+// What a swatch (null: the none swatch) changes: on a fillable shape's fill, a color also turns Fill on, and none turns it off.
+const swatch = (t, key, v) => key !== 'fc' || !('fill' in STYLES[t]) ? { [key]: v } : v ? { fc: v, fill: true } : { fill: false };
 // What the dock shows: the selected shape's style (in screen pixels), else the tool's.
 const styleNow = s => s ? { ...s, w: s.w / dpr, size: s.size / dpr } : styleOf(tool);
 const measure = new OffscreenCanvas(1, 1).getContext('2d');
@@ -334,13 +344,13 @@ function render() {
   let drawn = shapes;
   if (editing != null) {
     const s = shapes[editing], k = shot.clientWidth / W, p = s.tip ? PAD * s.size : 0, H = shot.naturalHeight, b = bounds(s);
-    Object.assign(edit.style, editBox(s, b, off, W, H, p), { font: `600 ${s.size * k}px/${LH} system-ui, sans-serif`, color: s.tip ? '#111' : s.c, background: s.tip || !['#ffffff', '#fdd835'].includes(s.c) ? '' : '#000c' });
-    // A callout being typed keeps its box and tail, sized to the editor (which is at least 2ch wide, and has the caret).
-    if (s.tip) { const v = clean(edit.value); drawn = shapes.with(editing, retext(s, v, Math.max(emOf(v), edit.offsetWidth / (s.size * k)), off)); }
+    Object.assign(edit.style, editBox(s, b, off, W, H, p), { font: `600 ${s.size * k}px/${LH} system-ui, sans-serif`, color: s.tip ? s.tc ?? '#111' : s.c, background: s.tip || s.fc ? 'transparent' : ['#ffffff', '#fdd835'].includes(s.c) ? '#000c' : '' });
+    // A callout (or a text with a background) being typed keeps its box, and tail, sized to the editor (at least 2ch wide, with the caret).
+    if (s.tip || s.fc) { const v = clean(edit.value); drawn = shapes.with(editing, retext(s, v, Math.max(emOf(v), edit.offsetWidth / (s.size * k)), off)); }
   }
   ink.innerHTML = toSvg(drawn, { ...off, w: W, h: shot.naturalHeight }, 12 * W / shot.clientWidth, dpr);
-  // The editor shows the text being typed: hide the drawn text (a callout's box and tail stay).
-  if (editing != null) ink.querySelector(`[data-i="${editing}"]${shapes[editing].tip ? ' > text' : ''}`).style.visibility = 'hidden';
+  // The editor shows the text being typed: hide the drawn text (a callout's box and tail, a text's background stay).
+  if (editing != null) ink.querySelector(`[data-i="${editing}"]${shapes[editing].tip || shapes[editing].fc ? ' > text' : ''}`).style.visibility = 'hidden';
   const s = shapes[cur];
   pickBox.hidden = !s || editing != null;
   if (!pickBox.hidden) {
@@ -353,12 +363,22 @@ function render() {
       if (p) Object.assign(i.style, { left: `calc(${(p[0] - b.l) / (b.r - b.l || 1) * 100}% - 6px)`, top: `calc(${(p[1] - b.t) / (b.b - b.t || 1) * 100}% - 6px)` });
     }
   }
-  const now = styleNow(s);
+  const now = styleNow(s), t = s?.type ?? tool, key = keyOf(t), tg = TARGETS[t] ?? {}, color = colorOf(now, t, key);
   for (const b of document.querySelectorAll('[data-tool], [data-c], [data-fill], [data-cmd]')) {
     const d = b.dataset;
     if (d.cmd) b.disabled = d.cmd === 'undo' ? !step : d.cmd === 'redo' ? step === hist.length - 1 : !s;
-    else b.setAttribute('aria-pressed', d.tool ? d.tool === tool : d.c ? d.c === now.c : !!now.fill);
+    else b.setAttribute('aria-pressed', d.tool ? d.tool === tool : d.c ? (d.c === 'none' ? null : d.c) === color : !!now.fill);
   }
+  // The target picker shows each target's color; the none swatch is only for a fill.
+  $('targets').hidden = !TARGETS[t];
+  for (const b of $('targets').children) {
+    const k = tg[b.dataset.target], c = k && colorOf(now, t, k);
+    b.hidden = !k;
+    b.setAttribute('aria-pressed', k === key);
+    b.classList.toggle('none', !c);
+    b.style.setProperty('--c', c || 'transparent');
+  }
+  $('nonec').hidden = key !== 'fc';
   // The dock shows only what applies to the selected shape, else to the tool: c(olor) w(idth) f(ill) s(ize) d(elete). Empty hides it.
   $('props').dataset.k = (KINDS[s?.type ?? tool] + (s ? ' d' : '')).trim();
   $('tsize').textContent = now.size ? Math.round(now.size) : '';
@@ -417,12 +437,13 @@ $('tools').onclick = $('props').onclick = ({ target, detail }) => {
   } else if (d.cmd) { if (cropping()) endCrop(); ({ undo: () => go(-1), redo: () => go(1), del: remove })[d.cmd](); }
   else {
     // A style button restyles the selected shape and sets its tool's style (the next shape of that kind gets it too).
-    const k = d.c ? 'c' : 'fill' in d ? 'fill' : null;
-    if (!k) return;
-    const v = k === 'c' ? d.c : !styleNow(s).fill;
-    setStyle(s?.type ?? tool, k, v);
-    if (s && k in s) {
-      shapes[cur] = { ...s, [k]: v };
+    // The target picker picks what the swatches color.
+    if (d.target) { colorTarget = d.target; return render(); }
+    const t = s?.type ?? tool, ch = d.c ? swatch(t, keyOf(t), d.c === 'none' ? null : d.c) : 'fill' in d ? { fill: !styleNow(s).fill } : null;
+    if (!ch) return;
+    setStyle(t, ch);
+    if (s) {
+      shapes[cur] = { ...s, ...ch };
       return editing == null ? commit() : render(); // an open edit commits its style with its text
     }
   }
@@ -431,7 +452,7 @@ $('tools').onclick = $('props').onclick = ({ target, detail }) => {
 // One step of weight (1–16 screen px) or text size (the size list) for the selected shape and its tool, or the tool.
 function stepStyle(k, d) {
   const s = shapes[cur], now = styleNow(s), v = k === 'w' ? Math.min(16, Math.max(1, Math.round(now.w) + d)) : nextSize(now.size, d);
-  setStyle(s?.type ?? tool, k, v);
+  setStyle(s?.type ?? tool, { [k]: v });
   if (s && k in s) shapes[cur] = { ...s, [k]: v * dpr };
   render();
 }
@@ -477,7 +498,7 @@ function finishEdit() {
 }
 // A window blur (Alt+Tab) keeps the textarea focused for when the window returns; only a real blur ends the edit.
 edit.onblur = () => document.activeElement === edit || finishEdit();
-edit.oninput = () => shapes[editing]?.tip && render(); // a callout's box follows the text
+edit.oninput = () => (shapes[editing]?.tip || shapes[editing]?.fc) && render(); // a callout's box, a text's background follow the text
 // Menu Print's dialog is that kind of blur too, so finish before it lays out the page.
 addEventListener('beforeprint', finishEdit);
 
@@ -487,8 +508,8 @@ function newShape(p) {
   if (tool === 'line') return { type: tool, c, w, pts: [p, p] };
   // dpr: arrowheads, callout pointers and cloud scallops keep the minimum size they had when drawn
   if (tool === 'arrow') return { type: tool, c, w, dpr, pts: [p, p] };
-  if (tool === 'callout') return { type: tool, c, w, dpr, size, x: p[0], y: p[1], text: '', em: 0, tip: p };
-  return { type: tool, c, w, dpr, fill: st.fill, l: p[0], t: p[1], r: p[0], b: p[1] };
+  if (tool === 'callout') return { type: tool, c, w, dpr, size, fc: st.fc, tc: st.tc, x: p[0], y: p[1], text: '', em: 0, tip: p };
+  return { type: tool, c, w, dpr, fill: st.fill, fc: st.fc, l: p[0], t: p[1], r: p[0], b: p[1] };
 }
 const atInk = ev => { const [x, y] = at(ev); return [x + off.x, y + off.y]; };
 // A handle of the selected shape resizes it; otherwise Select picks and moves, Text places or edits on release, and the rest draw.
@@ -524,8 +545,8 @@ function markDown(e) {
     stage.onpointerup = () => {
       stage.onpointerup = null;
       if (hit && shapes[hi].size) return startEdit(hi);
-      const { c } = styleOf(tool), size = styleOf(tool).size * dpr;
-      startEdit(shapes.push({ type: 'text', c, size, x: p0[0], y: newTextY(p0[1], size, off.y), text: '', em: 0 }) - 1);
+      const { c, fc } = styleOf(tool), size = styleOf(tool).size * dpr;
+      startEdit(shapes.push({ type: 'text', c, fc, size, x: p0[0], y: newTextY(p0[1], size, off.y), text: '', em: 0 }) - 1);
     };
     return;
   } else {

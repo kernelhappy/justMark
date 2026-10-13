@@ -82,3 +82,8 @@
   (Apply still needed), so a misclick on Reset loses nothing. A history step is `[shapes, crop]`; each applied crop's
   PNG is kept in memory for undo (a few MB each). The display still swaps in the cropped PNG (export path unchanged),
   rather than clipping the original with CSS. Applying the whole capture means no crop.
+- **2026-10-13 — Color targets as built** (handsoff, spec silent): on a fillable shape's Fill target, picking a color
+  also turns Fill on and None turns it off (picking a fill color with Fill off would otherwise change nothing
+  visible). The picker hides for tools with one color (highlighter, pen, line, arrow); the pick carries between
+  tools that have it, else the tool's first target. A callout's box can be None (transparent). A text's background
+  reaches 0.15 × size past the glyphs on each side.

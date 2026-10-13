@@ -1,8 +1,8 @@
 // Markup shapes, in pixels of the uncropped capture. One SVG serves the screen overlay and the export, so they match.
 // { type: 'pen'|'hl'|'line'|'arrow', c, w, pts: [[x, y], ...] }
-// { type: 'rect'|'ellipse'|'cloud', c, w, fill, l, t, r, b }  fill: solid in c
-// { type: 'text', c, size, x, y, text, em }  em: the widest line's width per unit of size
-// { type: 'callout', c, w, size, x, y, text, em, tip: [x, y] }
+// { type: 'rect'|'ellipse'|'cloud', c, w, fill, fc, l, t, r, b }  fill: solid in fc (missing: c)
+// { type: 'text', c, fc, size, x, y, text, em }  em: the widest line's width per unit of size; fc: background, null = none
+// { type: 'callout', c, w, size, fc, tc, x, y, text, em, tip: [x, y] }  fc: box (missing: white, null: none), tc: text (missing: #111)
 export const LH = 1.25, PAD = 0.4; // line height and callout padding, in font sizes
 const NO = { l: -Infinity, t: -Infinity, r: Infinity, b: Infinity };
 const f = v => Math.round(v * 10) / 10;
@@ -90,7 +90,7 @@ function cloud({ l, t, r, b, w }, dpr) {
 // pad > 0 draws a pad-wider outline instead, for hit testing.
 function draw(s, pad = 0, dpr = 1) {
   dpr = s.dpr ?? dpr; // the dpr the shape was drawn at, so zooming later doesn't change its export
-  const { c } = s, w = (s.type === 'hl' ? s.w * 4 : s.w) + pad, fill = s.fill ? c : 'none';
+  const { c } = s, w = (s.type === 'hl' ? s.w * 4 : s.w) + pad, fill = s.fill ? s.fc ?? c : 'none';
   const line = (d, more = '', fill = 'none') => `<path d="${d}" fill="${fill}" stroke="${c}" stroke-width="${f(w)}" stroke-linecap="round" stroke-linejoin="round"${more}/>`;
   const arrow = ([x0, y0], [x1, y1]) => {
     const d = Math.hypot(x1 - x0, y1 - y0), L = s.w * 3 + 12 * dpr, ux = (x1 - x0) / d || 0, uy = (y1 - y0) / d || 0, k = Math.min(L * 0.8, d);
@@ -110,10 +110,14 @@ function draw(s, pad = 0, dpr = 1) {
       return line(`M${l} ${cy}A${rx} ${ry} 0 1 0 ${r} ${cy}A${rx} ${ry} 0 1 0 ${l} ${cy}Z`, '', fill);
     }
     case 'cloud': return line(cloud(s, dpr), '', fill);
-    case 'text': return pad ? `<path d="${rectD(bounds(s))}"/>` : text(s.x, s.y, c);
+    case 'text': {
+      if (pad) return `<path d="${rectD(bounds(s))}"/>`;
+      const b = bounds(s), q = 0.15 * s.size; // a background reaches a little past the glyphs
+      return (s.fc ? `<path d="${rectD({ ...b, l: b.l - q, r: b.r + q })}" fill="${s.fc}"/>` : '') + text(s.x, s.y, c);
+    }
     case 'callout': {
       const b = bounds(s), p = PAD * s.size;
-      return arrow([(b.l + b.r) / 2, (b.t + b.b) / 2], s.tip) + `<path d="${rectD(b)}" fill="#fff" stroke="${c}" stroke-width="${f(w)}"/>` + text(s.x + p, s.y + p, '#111');
+      return arrow([(b.l + b.r) / 2, (b.t + b.b) / 2], s.tip) + `<path d="${rectD(b)}" fill="${s.fc === undefined ? '#fff' : s.fc ?? 'none'}" stroke="${c}" stroke-width="${f(w)}"/>` + text(s.x + p, s.y + p, s.tc ?? '#111');
     }
   }
   return '';
