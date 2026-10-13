@@ -135,3 +135,5 @@ export function editBox(s, b, off, W, H, p) {
 }
 // Scroll needed to bring a box (viewport top/bottom) clear of the fixed header (above `hi`) and bottom dock (below `lo`); the top wins.
 export const clearScroll = (top, bottom, hi, lo) => top < hi ? top - hi : Math.max(0, Math.min(bottom - lo, top - hi));
+// Top of a new text centered on a click, kept inside the image (above `top` it would be clipped).
+export const newTextY = (y, size, top) => Math.max(top, y - size * LH / 2);

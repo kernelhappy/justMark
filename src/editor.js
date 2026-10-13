@@ -1,5 +1,5 @@
 import { canvasToPdf } from './pdf.js';
-import { toSvg, bounds, handles, move, resize, dragEdges, snap, nextSize, clean, isReload, editBox, LH, PAD, clearScroll } from './markup.js';
+import { toSvg, bounds, handles, move, resize, dragEdges, snap, nextSize, clean, isReload, editBox, LH, PAD, clearScroll, newTextY } from './markup.js';
 
 const $ = id => document.getElementById(id);
 
@@ -439,7 +439,7 @@ function markDown(e) {
       stage.onpointerup = null;
       if (hit && shapes[hi].size) return startEdit(hi);
       const { c, size } = styleOf(tool);
-      startEdit(shapes.push({ type: 'text', c, size, x: p0[0], y: p0[1] - size * LH / 2, text: '', em: 0 }) - 1);
+      startEdit(shapes.push({ type: 'text', c, size, x: p0[0], y: newTextY(p0[1], size, off.y), text: '', em: 0 }) - 1);
     };
     return;
   } else {

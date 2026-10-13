@@ -537,3 +537,8 @@ for (const a of JSON.parse((await import('node:fs')).readFileSync('./src-tauri/t
   assert(mq && +mq[1] >= 720, 'narrow-width rule for #bottom');
   assert.match(mq[2], /#zoombar \{[^}]*grid-row: 1/);
 }
+{ // editor-r5-2: a new text clicked near the image top starts at the top edge, not above it
+  const { newTextY } = await import('./src/markup.js');
+  assert.strictEqual(newTextY(3, 20, 0), 0);
+  assert.strictEqual(newTextY(100, 20, 0), 100 - 20 * 1.25 / 2);
+}
