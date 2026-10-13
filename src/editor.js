@@ -500,6 +500,10 @@ onkeydown = e => {
     finishEdit();
     return e.repeat || run('print');
   }
+  if ((e.ctrlKey || e.metaKey) && k === 's') { // before the crop/text gates, which would swallow it; run() refuses mid-crop
+    e.preventDefault();
+    return e.repeat || run('save'); // a held Ctrl+S would queue a second Save dialog
+  }
   if (isReload(e)) return e.preventDefault();
   if (gesture) return;
   if (e.key === 'Escape' && document.querySelector(':popover-open')) return; // the Save menu closes itself; this Esc is spent
@@ -515,9 +519,9 @@ onkeydown = e => {
   if ((e.ctrlKey || e.metaKey) && (k === 'z' || k === 'y')) {
     e.preventDefault();
     go(k === 'y' || e.shiftKey ? 1 : -1);
-  } else if ((e.ctrlKey || e.metaKey) && (k === 's' || k === 'c')) {
+  } else if ((e.ctrlKey || e.metaKey) && k === 'c') {
     e.preventDefault();
-    if (!e.repeat) run(k === 's' ? 'save' : 'copy'); // a held Ctrl+S would queue a second Save dialog
+    if (!e.repeat) run('copy');
   } else if ((e.key === 'Delete' || e.key === 'Backspace') && e.target.tagName !== 'INPUT') remove();
   else if (e.key === 'Escape') {
     // Esc steps back to Select, then closes the editor (the snip is already on the clipboard).

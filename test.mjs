@@ -102,6 +102,18 @@ for (const [active, ends] of [['edit', false], ['body', true]]) {
 // Delete/Backspace on the Format or Quality radios must not delete the selected shape.
 globalThis.document = { querySelector: () => null }; // no Save menu open
 globalThis.isReload = (await import('./src/markup.js')).isReload; // editor.js imports it; the onkeydown harnesses below see it as a global
+// Ctrl+S while typing a label or cropping must reach Save (run handles the crop case), not be swallowed.
+{
+  const src = (await import('node:fs')).readFileSync('./src/editor.js', 'utf8');
+  const ran = [], edit = {};
+  let prevented = 0, crop = false;
+  const k = new Function('run', 'finishEdit', 'cropping', 'marking', 'remove', 'edit', 'go', 'render', 'stage', `let gesture = false, cur = 0, tool = 'select', onkeydown; ${src.match(/onkeydown = e => \{[\s\S]*?\n\};/)[0]} return onkeydown;`)(
+    a => ran.push(a), () => {}, () => crop, () => true, () => {}, edit, () => {}, () => {}, { dataset: {} });
+  k({ ctrlKey: true, key: 's', target: edit, preventDefault: () => prevented++ });
+  crop = true;
+  k({ ctrlKey: true, key: 's', target: { tagName: 'BODY' }, preventDefault: () => prevented++ });
+  assert.ok(prevented === 2 && ran.join() === 'save,save', 'Ctrl+S in the text editor or mid-crop was swallowed');
+}
 {
   const src = (await import('node:fs')).readFileSync('./src/editor.js', 'utf8');
   let removed = 0;
