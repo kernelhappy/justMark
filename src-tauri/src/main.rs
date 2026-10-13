@@ -190,12 +190,29 @@ async fn save(w: WebviewWindow, shots: State<'_, Shots>, req: Request<'_>) -> Re
     // Write a side file and rename it over the target: no half-written file, and saving into the Screenshots
     // folder is a rename there, not a creation, so the watcher doesn't open the saved image again.
     let name = path.file_name().unwrap_or_default().to_string_lossy().into_owned();
-    let part = path.with_file_name(format!("{name}.part"));
+    let part = part_path(&path);
     std::fs::write(&part, bytes).and_then(|_| std::fs::rename(&part, &path)).map_err(|e| {
         let _ = std::fs::remove_file(&part);
         e.to_string()
     })?;
     Ok(Some(name))
+}
+
+/// `<name>.part`, with the name cut so the component stays within NTFS's 255 UTF-16 units.
+fn part_path(path: &std::path::Path) -> PathBuf {
+    let mut n = 0;
+    let name: String = path.file_name().unwrap_or_default().to_string_lossy().chars().take_while(|c| {
+        n += c.len_utf16();
+        n <= 250
+    }).collect();
+    path.with_file_name(format!("{name}.part"))
+}
+
+#[test]
+fn part_name_fits_ntfs() {
+    let long = format!("{}.png", "a".repeat(248));
+    assert_eq!(part_path(&PathBuf::from(&long)).file_name().unwrap().len(), 255);
+    assert_eq!(part_path(&PathBuf::from("d/foo.png")), PathBuf::from("d/foo.png.part"));
 }
 
 /// The dialog keeps a typed extension even when it isn't the format's, so add the right one rather than put
