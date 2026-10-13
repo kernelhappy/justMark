@@ -54,3 +54,7 @@
   markup stays unsaved, when the clipboard changed since the window lost focus (sequence number), so a slow
   large encode can't overwrite a newer copy (seen in testing: a 3612×1913 encode finished after a later
   257×215 one). Rejected: copying on every change (the decided trigger is focus loss).
+- **2026-10-13 — Auto copy doesn't make a window disposable** (user's hands-on try): with Auto copy on,
+  Win+Shift+S blurred the editor, the auto copy counted as saved, and Max windows closed it as clean.
+  An auto copy now only spares Esc's confirm; Max windows and replace-in-place still treat the markup as
+  unsaved until a pressed Save or Copy. Hotkey recorder gets a Default button next to Clear (user).

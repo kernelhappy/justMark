@@ -576,3 +576,17 @@ for (const a of JSON.parse((await import('node:fs')).readFileSync('./src-tauri/t
   assert.strictEqual(await blur({ now: 'a', editing: 0 }), 'autocopy', 'a text being typed is unsaved');
   for (const o of [{ modal: true }, { busy: true }, { crop: true }, { now: 'a' }, { on: false }]) assert.strictEqual(await blur(o), '', JSON.stringify(o));
 }
+// An Auto copy lets Esc close without asking, but Rust still sees unsaved work (Max windows, replace-in-place keep it).
+{
+  const src = (await import('node:fs')).readFileSync('./src/editor.js', 'utf8');
+  const sent = [];
+  const [run, esc] = new Function('ACTIONS', 'png', '$', 'opts', 'finishEdit', 'state', 'cropping', 'invoke', 'editing', 'gesture',
+    `let busy = false, next = null; ${src.match(/let saved = .*/)[0]} ${src.match(/let kept = [\s\S]*?\n/)[0]} ${src.match(/const report = .*/)[0]}
+    ${src.match(/async function run\(key\) \{[\s\S]*?\n\}/)[0]} return [run, () => state() === saved];`)(
+    { autocopy: async () => 'Copied as PNG', copy: async () => 'Copied as PNG' }, {}, () => ({}), { format: {} }, () => {},
+    () => 'drawn', () => false, (c, a) => sent.push(a.d), null, false);
+  await run('autocopy');
+  assert.deepStrictEqual([esc(), sent.at(-1)], [true, true], 'an Auto copy made the window disposable');
+  await run('copy');
+  assert.deepStrictEqual(sent.at(-1), false, 'a pressed Copy left the window unsaved for Rust');
+}

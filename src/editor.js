@@ -96,10 +96,12 @@ const ACTIONS = {
 // What Save or Copy last exported: Esc closes without asking while nothing since is unsaved.
 const state = () => hist[step] + JSON.stringify(off);
 let saved = '[]{"x":0,"y":0}';
-// Rust is told too: an editor with unsaved work doesn't take the next snip, and Max windows closes others first.
+// What a Save or Copy the user pressed last exported. Rust is told about unsaved work against this, not `saved`: an
+// editor with unsaved work doesn't take the next snip, and Max windows closes others first. An Auto copy fires
+// whenever focus leaves (a new snip too), so it lets Esc close without asking but doesn't make the window disposable.
 // A text being typed or a stroke being drawn isn't in the history yet but counts.
-let reported = false;
-const report = () => { const d = editing != null || gesture || state() !== saved; if (d !== reported) invoke('dirty', { d: reported = d }); };
+let kept = saved, reported = false;
+const report = () => { const d = editing != null || gesture || state() !== kept; if (d !== reported) invoke('dirty', { d: reported = d }); };
 // While set, focus loss is our own dialog's (or the window closing), not the user leaving: no Auto copy.
 let modal = false;
 const closeEditor = () => {
@@ -107,7 +109,7 @@ const closeEditor = () => {
   if (state() === saved || confirm('Close without saving or copying your markup?')) return invoke('close');
   modal = false;
 };
-// Auto copy (a setting): leaving the window with unsaved markup copies it, as Copy would, so it counts as saved.
+// Auto copy (a setting): leaving the window with unsaved markup copies it, as Copy would, so Esc won't ask (see `kept`).
 // Save and Print dialogs hold `busy`; a pending crop isn't markup yet.
 onblur = async () => {
   if (modal || busy || !png || cropping() || (editing == null && state() === saved)) return;
@@ -130,7 +132,7 @@ async function run(key) {
   try {
     const at = state(), msg = await act(opts.format.value);
     $('status').textContent = msg;
-    if (msg) saved = at; // Save or Copy went through; a cancelled picker or Print says nothing
+    if (msg) { saved = at; if (key !== 'autocopy') kept = at; } // Save or Copy went through; a cancelled picker or Print says nothing
     report();
   } catch (e) {
     $('status').textContent = 'Failed: ' + (e.message ?? e); // Rust commands reject with a string

@@ -29,7 +29,7 @@
 <form id="f">
   <label><span class="name">Auto open on snip<span class="hint">Off: snips only land in the Screenshots folder.</span></span><input type="checkbox" name="autoOpen"></label>
   <div class="row"><span class="name">Open latest snip<span class="hint" id="taken" hidden>Taken by another app, or not usable: pick another.</span></span>
-    <button type="button" id="key" title="Click, then press the keys"></button><button type="button" id="clear">Clear</button></div>
+    <button type="button" id="key" title="Click, then press the keys"></button><button type="button" id="clear">Clear</button><button type="button" id="default">Default</button></div>
   <label><span class="name">New snip opens a new window<span class="hint">Off: it goes into the last-used editor, unless that has unsaved markup.</span></span><input type="checkbox" name="newWindow"></label>
   <label><span class="name">Max windows<span class="hint">One more closes the oldest, without unsaved markup if any.</span></span><input type="number" name="maxWindows" min="1" max="50" required></label>
   <label><span class="name">Auto copy on focus loss<span class="hint">Leaving an editor with unsaved markup copies it.</span></span><input type="checkbox" name="autoCopy"></label>
@@ -63,6 +63,7 @@
     apply();
   };
   document.getElementById('clear').onclick = () => { s.hotkey = ''; apply(); };
+  document.getElementById('default').onclick = () => { s.hotkey = 'Shift+Alt+KeyS'; apply(); }; // Settings::default in main.rs
   // Recording: click the key, press a combination. A modifier is needed (bare F-keys aside) so typing isn't taken over;
   // PrintScreen stays Windows'. Esc cancels the recording; otherwise it closes the window.
   const record = on => { key.setAttribute('aria-pressed', on); key.textContent = on ? 'Press keys…' : shown(s.hotkey); };
