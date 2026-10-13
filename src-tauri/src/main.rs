@@ -64,6 +64,17 @@ fn blocking_work_leaves_the_async_runtime_free() {
 }
 
 /// One hidden window per image; the page shows it once the image is laid out (see `ready`).
+/// A second launch's relative path means relative to where it ran, not to the tray's cwd.
+fn from_cwd(cwd: &str, arg: String) -> PathBuf {
+    Path::new(cwd).join(arg)
+}
+
+#[test]
+fn second_launch_paths_resolve_against_its_cwd() {
+    assert_eq!(from_cwd(r"C:\shots", "a.png".into()), PathBuf::from(r"C:\shots\a.png"));
+    assert_eq!(from_cwd(r"C:\shots", r"D:\b.png".into()), PathBuf::from(r"D:\b.png"));
+}
+
 fn open(app: &AppHandle, path: PathBuf, t0: Instant, from_watcher: bool) {
     static N: AtomicUsize = AtomicUsize::new(0);
     let label = format!("shot{}", N.fetch_add(1, Ordering::Relaxed));
@@ -270,9 +281,9 @@ fn watch_follows_the_folder_when_it_moves() {
 fn main() {
     let app = tauri::Builder::default()
         // A second launch (e.g. "Open with") hands its files to the running tray instance.
-        .plugin(tauri_plugin_single_instance::init(|app, argv, _| {
+        .plugin(tauri_plugin_single_instance::init(|app, argv, cwd| {
             for a in argv.into_iter().skip(1) {
-                open(app, a.into(), Instant::now(), false);
+                open(app, from_cwd(&cwd, a), Instant::now(), false);
             }
         }))
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, None))
