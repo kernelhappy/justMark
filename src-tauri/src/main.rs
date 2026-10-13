@@ -136,11 +136,12 @@ async fn save(w: WebviewWindow, shots: State<'_, Shots>, req: Request<'_>) -> Re
     };
     let stem = shots.0.lock().unwrap().get(w.label()).and_then(|s| s.0.file_stem().map(|n| n.to_string_lossy().into_owned()));
     let file_name = format!("{}.{ext}", stem.unwrap_or_else(|| "snarkymark".into()));
-    let ext = ext.to_owned();
-    let Some(path) = blocking(move || rfd::FileDialog::new().set_parent(&w).set_file_name(file_name).add_filter(kind, &[ext]).save_file()).await?
+    let filter = ext.to_owned();
+    let Some(path) = blocking(move || rfd::FileDialog::new().set_parent(&w).set_file_name(file_name).add_filter(kind, &[filter]).save_file()).await?
     else {
         return Ok(None);
     };
+    let path = with_ext(path, ext);
     // Write a side file and rename it over the target: no half-written file, and saving into the Screenshots
     // folder is a rename there, not a creation, so the watcher doesn't open the saved image again.
     let name = path.file_name().unwrap_or_default().to_string_lossy().into_owned();
@@ -150,6 +151,25 @@ async fn save(w: WebviewWindow, shots: State<'_, Shots>, req: Request<'_>) -> Re
         e.to_string()
     })?;
     Ok(Some(name))
+}
+
+/// The dialog keeps a typed extension even when it isn't the format's, so add the right one rather than put
+/// PNG bytes in foo.jpg.
+fn with_ext(path: PathBuf, ext: &str) -> PathBuf {
+    let typed = path.extension().map(|e| e.to_string_lossy().to_ascii_lowercase());
+    if typed.as_deref() == Some(ext) || (ext == "jpg" && typed.as_deref() == Some("jpeg")) {
+        return path;
+    }
+    let mut s = path.into_os_string();
+    s.push(format!(".{ext}"));
+    s.into()
+}
+
+#[test]
+fn saved_files_get_the_formats_extension() {
+    assert_eq!(with_ext("a/foo.jpg".into(), "png"), PathBuf::from("a/foo.jpg.png"));
+    assert_eq!(with_ext("a/foo.PNG".into(), "png"), PathBuf::from("a/foo.PNG"));
+    assert_eq!(with_ext("a/foo.jpeg".into(), "jpg"), PathBuf::from("a/foo.jpeg"));
 }
 
 #[tauri::command]
