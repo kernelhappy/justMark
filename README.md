@@ -24,7 +24,7 @@ Win+Shift+S and PrtScn work as always, and every snip opens in justMark, ready t
 |---|---|---|---|---|
 | Select | V | | Ellipse | E |
 | Highlighter | H | | Cloud | C |
-| Pen | P | | Polygon | G |
+| Pen | P | | Polyline / Polygon | G |
 | Line | L | | Text | T |
 | Arrow | A | | Callout | B |
 | Rectangle | R | | Crop | X |

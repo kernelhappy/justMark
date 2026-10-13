@@ -106,3 +106,8 @@
 - **2026-10-13 — Right-click verb as built** (handsoff, spec silent): when the setting is off, startup removes the verb
   (so a stale one from a moved exe can't linger); the verb gets the exe's icon (`Icon` value); written with the
   `winreg` crate (already in the tree via auto-launch). No SHChangeNotify: Explorer reads classic verbs live.
+- **2026-10-13 — Polyline = the Polygon tool left open** (user; same change in JustSave 9e74e2f). One tool (G), one
+  type (`poly` + `open`), not a new tool: the gestures split cleanly (first point closes; double-click/Enter, and
+  anything else that ends it, leave it open), and markup.js already drew `open`, so markup.js stays byte-identical
+  with JustSave's. No "close it later" control (user: no; redraw it instead). No arrowheads on polylines (out of
+  scope). A polyline needs 2 points, a polygon 3.

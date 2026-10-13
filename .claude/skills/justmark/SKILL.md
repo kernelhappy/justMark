@@ -90,7 +90,7 @@ smaller image encoded first), Rust writes nothing and the markup stays unsaved: 
   - Page name: the URL hash carries the image stem (percent-encoded), used for `document.title`.
 - **Editor = JustSave's** (`markup.js`, `pdf.js` unchanged; `editor.js`/`index.html` from
   `result.js`/`result.html` at JustSave `5cece1b`). Shapes: highlighter, pen, line, arrow, rect, ellipse,
-  cloud, polygon, text, callout (see Editor features); markup is burned into every export, so opaque markup covers; crop; zoom; Save (PNG/JPG/PDF),
+  cloud, polyline/polygon, text, callout (see Editor features); markup is burned into every export, so opaque markup covers; crop; zoom; Save (PNG/JPG/PDF),
   Copy (PNG, `navigator.clipboard.write`), Print (`print()` of the burned-in PNG). JustMark-only
   changes: capture comes from `invoke('shot')` (JPEG normalized to PNG at load), always in markup
   (JustSave's Markup toggle is gone), Ctrl+S/Ctrl+C, Esc-to-close, no browser context menu (except in
@@ -131,15 +131,18 @@ So mouse-up → editor visible ≈ 0.6–0.8 s. Regressions past ~1 s or idle pa
   A held run on a selected shape is one undo step. Left of −, a preview of the line itself shows the weight: the
   line's color, its screen thickness (the highlighter's 4×), up to 16 px.
 - **Callout tail stays drawn while its text is being typed** (built): the box and tail follow the editor live.
-- **Polygon (G)** (built): click adds a point; double-click, Enter or clicking the first point closes; Backspace
-  drops the last point; Esc cancels the polygon in progress. Shift snaps the next edge to 45°. Weight,
-  Fill and patterns as rect.
-- **Fill = split button** (built; rect, ellipse, cloud, polygon; not the callout box). Click toggles the tool's
+- **Polyline / Polygon (G)** (built; polyline 2026-10-13): click adds a point; clicking the first point closes it
+  into a polygon (3+ points); double-click or Enter ends it open, a polyline (2+ points). Anything else that ends
+  it (tool switch, Undo/Redo, Crop, Save/Copy/Print, Auto copy) ends it open too; too few points is dropped.
+  Backspace drops the last point; Esc cancels the one in progress. Shift snaps the next edge to 45°. One type:
+  `poly`, `open: true` for a polyline. A polygon has weight, Fill and patterns as rect; a polyline is styled like a
+  line (color, weight, see-through; no Fill, no target picker) and has no arrowheads.
+- **Fill = split button** (built; rect, ellipse, cloud, closed polygon; not a polyline, not the callout box). Click toggles the tool's
   last fill; ▾ opens a popover: none, solid, 13 patterns, and a density slider that scales every
   pattern's spacing. Patterns (SVG `<pattern>` in the fill color): `///`, `\\\`, `|||`, `===`, `###`
   grid, `×××` diagonal crosshatch, halftone light/medium/heavy (~15/35/60% dot coverage, by dot size),
   herringbone, running bond brick, checkerboard. The user will prune what proves useless.
-- **See-through = split button** (built; pen, line, arrow, rect, ellipse, cloud, polygon; not text/callout): click
+- **See-through = split button** (built; pen, line, arrow, rect, ellipse, cloud, polyline/polygon; not text/callout): click
   toggles it; ▾ opens an Opacity slider, 10–90% in 10% steps, default 40% (the highlighter's). Moving the slider
   turns See-through on. The whole shape is drawn at that opacity, as a group so a stroke over its own fill
   doesn't double. Opacity is part of the tool's style. A drag on either slider (opacity, density) is one undo step.
@@ -148,7 +151,7 @@ So mouse-up → editor visible ≈ 0.6–0.8 s. Regressions past ~1 s or idle pa
   export" instead of naming black boxes.
 - **Color targets** (built): a Line · Fill · Text segmented picker before the one swatch row; swatches set the
   chosen target and the picker shows each target's color. Callout: line (border + tail), fill (box,
-  today #fff), text (today #111). Text: text + optional background fill. Rect, ellipse, cloud, polygon:
+  today #fff), text (today #111). Text: text + optional background fill. Rect, ellipse, cloud, polygon (not a polyline):
   Line · Fill, fill defaulting to the line color. The Fill target adds a "none" swatch.
 - **Re-croppable crop** (built): a crop is a view of the original capture, never destructive. Crop again shows
   the whole original with the current crop as the box; the crop bar is Reset (whole capture) · Cancel ·
