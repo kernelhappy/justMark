@@ -108,6 +108,45 @@ smaller image encoded first), Rust writes nothing and the markup stays unsaved: 
 
 So mouse-up → editor visible ≈ 0.6–0.8 s. Regressions past ~1 s or idle past ~10 MB need a reason.
 
+## Editor features (decided 2026-10-13, not built yet)
+
+- **Style per tool, remembered.** Each tool keeps its own colors, weight, fill/pattern, see-through and
+  text size; restyling a selected shape updates its tool's style. Kept in localStorage (shared by every
+  editor window, like Save's format), so it carries to the next shape and the next window.
+- **Weight − value +** replaces Thin/Medium/Thick: 1–16 screen px, step 1, default 4, for every tool
+  with a weight (highlighter keeps its 4× drawn width; callout border). Holding − or + repeats: one step,
+  then after 400 ms ~12 steps/s until release or the pointer leaves. Text size's −/+ repeat the same way.
+  A held run on a selected shape is one undo step.
+- **Callout tail stays drawn while its text is being typed.**
+- **Polygon (G):** click adds a point; double-click, Enter or clicking the first point closes; Backspace
+  drops the last point; Esc cancels the polygon in progress. Shift snaps the next edge to 45°. Weight,
+  Fill and patterns as rect.
+- **Fill = split button** (rect, ellipse, cloud, polygon; not the callout box). Click toggles the tool's
+  last fill; ▾ opens a popover: none, solid, 13 patterns, and a density slider that scales every
+  pattern's spacing. Patterns (SVG `<pattern>` in the fill color): `///`, `\\\`, `|||`, `===`, `###`
+  grid, `×××` diagonal crosshatch, halftone light/medium/heavy (~15/35/60% dot coverage, by dot size),
+  herringbone, running bond brick, checkerboard. The user will prune what proves useless.
+- **See-through toggle** (pen, line, arrow, rect, ellipse, cloud, polygon; not text/callout): the whole
+  shape at 40% opacity, as a group so a stroke over its own fill doesn't double. Same as the highlighter.
+- **Covering, not redaction:** every export is flattened, so any opaque markup covers what's under it
+  for good. See-through shapes and patterns don't. Fill's tooltip says "covers what's under it in every
+  export" instead of naming black boxes.
+- **Color targets:** a Line · Fill · Text segmented picker before the one swatch row; swatches set the
+  chosen target and the picker shows each target's color. Callout: line (border + tail), fill (box,
+  today #fff), text (today #111). Text: text + optional background fill. Rect, ellipse, cloud, polygon:
+  Line · Fill, fill defaulting to the line color. The Fill target adds a "none" swatch.
+- **Re-croppable crop:** a crop is a view of the original capture, never destructive. Crop again shows
+  the whole original with the current crop as the box; the crop bar is Reset (whole capture) · Cancel ·
+  Apply; each applied crop is one undo step. The Undo crop button goes.
+
+## Explorer right-click (decided 2026-10-13, not built yet)
+
+- Classic verb **JustMark** on png, jpg, jpeg, bmp, gif, webp:
+  `HKCU\Software\Classes\SystemFileAssociations\.<ext>\shell\JustMark\command` = `"<exe>" "%1"`. The app
+  writes it per a Settings toggle (on by default) and re-points it at startup, like Start at login. On
+  Windows 11 it shows under Show more options. File associations get bmp/gif/webp too; the watcher stays
+  png/jpg/jpeg. Revisit (NSIS uninstall hook, install-time option) once there's an installer.
+
 ## Non-goals
 
 Own capture overlay; taking over Win+Shift+S; MSIX packaging / `ms-screenclip` redirect (only if the

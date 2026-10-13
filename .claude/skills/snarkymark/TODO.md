@@ -1,5 +1,7 @@
 # TODO
 
+- [ ] Rename snarkymark → JustMark (product name, identifier, tray tooltip, skill/memory names, repo) once
+      Settings merges. A new identifier moves the config dir and WebView2 data (settings, localStorage reset).
 - [ ] User: turn off Snipping Tool notifications (Settings → System → Notifications) so its toast doesn't
       compete with snarkymark; keep "Automatically save screenshots" on.
 - [ ] Verify "Start at login" (now in the Settings window) by hand (not exercised in automation, to avoid

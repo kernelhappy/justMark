@@ -58,3 +58,19 @@
   Win+Shift+S blurred the editor, the auto copy counted as saved, and Max windows closed it as clean.
   An auto copy now only spares Esc's confirm; Max windows and replace-in-place still treat the markup as
   unsaved until a pressed Save or Copy. Hotkey recorder gets a Default button next to Clear (user).
+- **2026-10-13 — Editor wishlist designed** (see SKILL.md Editor features, Explorer right-click):
+  - Weight is linear 1–16 (user), not a stepped list; hold-to-repeat makes linear quick. Text size repeats too.
+  - Style per tool, not one shared style: a black filled box would otherwise turn the next arrow black.
+  - Polygon closes three ways (double-click, Enter, first point); key G (P is Pen).
+  - No separate redaction: exports are flattened, so any opaque markup covers (user). A real redaction
+    tool only matters if PDF export ever keeps live markup objects (WISHLIST).
+  - Fill patterns: user's list plus `\\`, `×××`, checkerboard; skipped zigzag/waves (busy when dense).
+    Not on the callout box (hatching under text). Fill is a split button like Save, not a dock strip.
+  - See-through = 40% opacity like the highlighter, not multiply: multiply vanishes on dark screenshots and
+    can't blend with the capture while the ink is one SVG drawn over it.
+  - Colors: one swatch row plus a Line · Fill · Text target picker (user: try it), over three rows. Fillable
+    shapes get Line · Fill too.
+  - Undo crop removed (user hadn't noticed it); Crop again reopens over the original, crops are undoable.
+  - Right-click verb labelled just "JustMark"; app-managed HKCU toggle because dev runs the bare exe.
+    Windows 11 top-level menu needs IExplorerCommand + a signed sparse package: deferred to installer/signing.
+- **2026-10-13 — Rename to JustMark** (user), to show its relation to JustSave. After Settings merges.
