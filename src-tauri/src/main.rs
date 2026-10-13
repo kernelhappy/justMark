@@ -13,7 +13,7 @@ use std::{
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicUsize, Ordering},
-        Mutex,
+        Arc, Mutex,
     },
     thread::sleep,
     time::{Duration, Instant},
@@ -308,33 +308,58 @@ fn wait_complete_waits_for_the_end_marker() {
 /// Calls `on_image` for each image created in the folder `resolve` names, for the life of the process.
 fn watch_images(
     resolve: impl Fn() -> Option<PathBuf> + Send + 'static,
-    every: Duration,
+    retry: Duration,
     on_image: impl Fn(PathBuf) + Send + 'static,
 ) -> notify::Result<()> {
+    // The folder can move while the tray runs (Properties > Location > Move, OneDrive backup of Pictures). notify says
+    // nothing when a watched folder itself is renamed or deleted, so its parent is watched too: an event naming the
+    // folder there means it went away, and only then is the location looked up again (no polling).
+    let dir = Arc::new(Mutex::new(resolve().ok_or_else(|| notify::Error::generic("no Screenshots folder"))?));
+    let (gone_tx, gone) = std::sync::mpsc::channel();
+    let d = dir.clone();
     let mut watcher = notify::recommended_watcher(move |r: notify::Result<notify::Event>| {
         let Ok(e) = r else { return };
-        if !matches!(e.kind, EventKind::Create(_)) {
-            return;
-        }
-        for p in e.paths.into_iter().filter(|p| is_image(p)) {
-            on_image(p);
+        let cur = d.lock().unwrap().clone();
+        if e.paths.iter().any(|p| *p == cur) {
+            let _ = gone_tx.send(());
+        } else if matches!(e.kind, EventKind::Create(_)) {
+            // The parent watch reports its own files too; only images in the folder itself count.
+            for p in e.paths.into_iter().filter(|p| is_image(p) && p.parent() == Some(&*cur)) {
+                on_image(p);
+            }
         }
     })?;
-    let mut dir = resolve().ok_or_else(|| notify::Error::generic("no Screenshots folder"))?;
-    watcher.watch(&dir, RecursiveMode::NonRecursive)?;
-    // The folder can move while the tray runs (Properties > Location, OneDrive backup of Pictures), and notify
-    // drops a deleted folder's watch without an event: re-resolve it now and then and watch the new place.
-    std::thread::spawn(move || loop {
-        sleep(every);
-        match resolve() {
-            Some(now) if now != dir => {
-                let _ = watcher.unwatch(&dir);
-                if let Err(e) = watcher.watch(&now, RecursiveMode::NonRecursive) {
-                    log!("not watching {}: {e}", now.display());
+    let watch = |w: &mut notify::RecommendedWatcher, dir: &Path| -> notify::Result<()> {
+        w.watch(dir, RecursiveMode::NonRecursive)?;
+        if let Some(parent) = dir.parent() {
+            let _ = w.watch(parent, RecursiveMode::NonRecursive); // best effort: without it, a move needs a restart
+        }
+        Ok(())
+    };
+    let first = dir.lock().unwrap().clone();
+    watch(&mut watcher, &first)?;
+    std::thread::spawn(move || {
+        while gone.recv().is_ok() {
+            let old = dir.lock().unwrap().clone();
+            // The new location may be registered a moment after the old folder goes: look a few times, then give up.
+            let mut found = None;
+            for _ in 0..30 {
+                found = resolve().filter(|p| *p != old && p.is_dir());
+                if found.is_some() {
+                    break;
                 }
-                dir = now;
+                sleep(retry);
             }
-            _ => {}
+            let Some(now) = found else { continue };
+            let _ = watcher.unwatch(&old);
+            if let Some(parent) = old.parent() {
+                let _ = watcher.unwatch(parent);
+            }
+            *dir.lock().unwrap() = now.clone();
+            if let Err(e) = watch(&mut watcher, &now) {
+                log!("not watching {}: {e}", now.display());
+            }
+            while gone.try_recv().is_ok() {} // the rest of the old folder's events
         }
     });
     Ok(())
@@ -344,10 +369,10 @@ fn watch_images(
 fn watch_follows_the_folder_when_it_moves() {
     let base = std::env::temp_dir().join("snarkymark-move-test");
     let _ = std::fs::remove_dir_all(&base);
-    let (a, b) = (base.join("a"), base.join("b"));
+    let (a, b) = (base.join("pics").join("a"), base.join("b"));
     std::fs::create_dir_all(&a).unwrap();
     std::fs::create_dir_all(&b).unwrap();
-    let cur = std::sync::Arc::new(Mutex::new(a.clone()));
+    let cur = Arc::new(Mutex::new(a.clone()));
     let c = cur.clone();
     let (tx, rx) = std::sync::mpsc::channel();
     let tx = Mutex::new(tx);
@@ -357,10 +382,22 @@ fn watch_follows_the_folder_when_it_moves() {
     .unwrap();
     std::fs::write(a.join("1.png"), b"x").unwrap();
     assert!(rx.recv_timeout(Duration::from_secs(2)).is_ok_and(|p| p.ends_with("1.png")));
+    std::fs::write(a.parent().unwrap().join("other.png"), b"x").unwrap(); // the parent's own files don't open
+    assert!(rx.recv_timeout(Duration::from_millis(300)).is_err(), "a file in the parent folder opened");
+    // Location > Move on the same drive: the folder is renamed away and the known folder points elsewhere.
     *cur.lock().unwrap() = b.clone();
-    sleep(Duration::from_millis(300));
+    std::fs::rename(&a, base.join("pics").join("a-moved")).unwrap();
+    sleep(Duration::from_millis(500));
     std::fs::write(b.join("2.png"), b"x").unwrap();
     assert!(rx.recv_timeout(Duration::from_secs(2)).is_ok_and(|p| p.ends_with("2.png")), "new folder not watched");
+    // A move to another drive copies, then deletes the old folder.
+    let c3 = base.join("c");
+    std::fs::create_dir_all(&c3).unwrap();
+    *cur.lock().unwrap() = c3.clone();
+    std::fs::remove_dir_all(&b).unwrap();
+    sleep(Duration::from_millis(500));
+    std::fs::write(c3.join("3.png"), b"x").unwrap();
+    assert!(rx.recv_timeout(Duration::from_secs(2)).is_ok_and(|p| p.ends_with("3.png")), "not watched after the old folder was deleted");
     let _ = std::fs::remove_dir_all(base);
 }
 
@@ -444,7 +481,7 @@ fn main() {
                 use known_folders::{get_known_folder_path, KnownFolder};
                 screenshots_dir(get_known_folder_path(KnownFolder::Screenshots), get_known_folder_path(KnownFolder::Pictures))
             };
-            if let Err(e) = watch_images(resolve, Duration::from_secs(3), move |p| open(&h, p, Instant::now(), true)) {
+            if let Err(e) = watch_images(resolve, Duration::from_secs(1), move |p| open(&h, p, Instant::now(), true)) {
                 log!("not watching Screenshots: {e}");
             }
             Ok(())
