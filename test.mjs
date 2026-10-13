@@ -250,9 +250,9 @@ globalThis.document = { querySelector: () => null }; // no Save menu open
   const src = (await import('node:fs')).readFileSync('./src/editor.js', 'utf8');
   const els = {}, $ = id => (els[id] ??= { value: 'png', textContent: '' }), opts = { format: { value: 'png' } };
   let result;
-  const [run, saved] = new Function('$', 'encode', 'invoke', 'png', 'state', 'opts', 'finishEdit',
+  const [run, saved] = new Function('$', 'encode', 'invoke', 'png', 'state', 'opts', 'finishEdit', 'cropping',
     `let saved = 'blank'; const ACTIONS = {${src.match(/async save\(fmt\) \{[\s\S]*?\n  \},/)[0]}}; ${src.match(/let busy[\s\S]*?\n\}/)[0]}; return [run, () => saved];`)(
-    $, async () => new Blob(['x']), async (cmd, body, o) => { assert.deepStrictEqual([cmd, o.headers.ext], ['save', 'png']); return result(); }, {}, () => 'drawn', opts, () => {});
+    $, async () => new Blob(['x']), async (cmd, body, o) => { assert.deepStrictEqual([cmd, o.headers.ext], ['save', 'png']); return result(); }, {}, () => 'drawn', opts, () => {}, () => false);
   result = () => { throw 'Access is denied. (os error 5)'; };
   await run('save');
   assert.strictEqual(els.status.textContent, 'Failed: Access is denied. (os error 5)', 'failed write not reported');
@@ -268,9 +268,9 @@ globalThis.document = { querySelector: () => null }; // no Save menu open
 {
   const src = (await import('node:fs')).readFileSync('./src/editor.js', 'utf8');
   const els = {}, $ = id => (els[id] ??= { value: 'png', textContent: '' }), opts = { format: { value: 'png' } }, log = [];
-  const run = new Function('$', 'png', 'state', 'opts', 'finishEdit', 'ACTIONS',
+  const run = new Function('$', 'png', 'state', 'opts', 'finishEdit', 'ACTIONS', 'cropping',
     `let saved; ${src.match(/let busy[\s\S]*?\n\}/)[0]}; return run;`)(
-    $, {}, () => 's', opts, () => log.push('finish'), { copy: async () => (log.push('encode'), 'Copied') });
+    $, {}, () => 's', opts, () => log.push('finish'), { copy: async () => (log.push('encode'), 'Copied') }, () => false);
   await run('copy');
   assert.deepStrictEqual(log, ['finish', 'encode'], 'Copy exported before the open text edit was finished');
 }
@@ -367,8 +367,8 @@ globalThis.document = { querySelector: () => null }; // no Save menu open
   let screen = 'no box', release;
   const ACTIONS = { async copy() { const at = screen; await new Promise(r => { release ??= r; if (release !== r) r(); }); copied.push(at); return 'Copied as PNG'; } };
   const status = {};
-  const run = new Function('ACTIONS', 'png', 'finishEdit', '$', 'state', 'opts', `let saved; ${src} return run;`)(
-    ACTIONS, {}, () => {}, () => status, () => screen, { format: {} });
+  const run = new Function('ACTIONS', 'png', 'finishEdit', '$', 'state', 'opts', 'cropping', `let saved; ${src} return run;`)(
+    ACTIONS, {}, () => {}, () => status, () => screen, { format: {} }, () => false);
   const first = run('copy');
   screen = 'box';
   const second = run('copy');
@@ -396,5 +396,14 @@ globalThis.document = { querySelector: () => null }; // no Save menu open
     () => status, () => {}, shot, { querySelectorAll: () => [btn] });
   assert.ok(!png, 'a broken image left png set, so Save and Copy still run');
   assert.strictEqual(btn.disabled, true);
+}
+// Save/Copy/Print while a crop box is pending must not export the uncropped image (export-r3-2).
+{
+  const src = (await import('node:fs')).readFileSync('./src/editor.js', 'utf8');
+  const ran = [], status = {};
+  const run = new Function('ACTIONS', 'png', '$', 'opts', 'finishEdit', 'state', 'cropping', `let busy = false, next = null, saved; ${src.match(/async function run\(key\) \{[\s\S]*?\n\}/)[0]} return run;`)(
+    { copy: async () => { ran.push('copy'); return 'Copied'; } }, {}, () => status, { format: {} }, () => {}, () => '', () => true);
+  await run('copy');
+  assert.deepStrictEqual(ran, [], 'Copy exported while a crop was pending');
 }
 console.log('ok');

@@ -93,6 +93,8 @@ let busy = false, next = null;
 async function run(key) {
   const act = ACTIONS[key];
   if (!act || !png) return;
+  // The pending crop box isn't in png yet: exporting now would ship the area being cut away (Ctrl+P lands here too).
+  if (cropping()) { $('status').textContent = 'Apply or cancel the crop first'; return; }
   finishEdit(); // toolbar presses keep an open text focused, so its typed text isn't in shapes yet
   if (busy) { next = key; return; }
   busy = true;
