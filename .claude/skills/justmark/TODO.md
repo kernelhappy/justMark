@@ -4,6 +4,15 @@
       WebView2 data (settings, localStorage reset once).
 - [ ] User: rename the local repo folder, the GitHub repo and the Claude memory dir (left alone: renaming them
       breaks paths). The old `%APPDATA%\io.github.snarkymark` and `%LOCALAPPDATA%\io.github.snarkymark` can go.
+- [ ] User: HKCU Run still has a `snarkymark` Start-at-login value pointing at the old `snarkymark.exe` (the old
+      build is still in `target/release`). Tick Start at login in JustMark's Settings, then remove the old value
+      (Task Manager → Startup apps, or `reg delete HKCU\Software\Microsoft\Windows\CurrentVersion\Run /v snarkymark`).
+- [x] Editor features and Explorer right-click built (2026-10-13, branch `feat/2026-10-13-justmark-editor`).
+- [ ] Hands-on: the right-click verb in a real Explorer menu (registry entries and the command line were verified,
+      the menu itself wasn't opened); a .webp opened by it (bmp and gif were).
+- [ ] Prune the fill patterns that prove useless (user, after trying them).
+- [ ] Turning the right-click verb off leaves an empty `shell` key per extension (harmless).
+- [ ] Each applied crop's PNG stays in memory for undo; a long re-crop session on a 4K snip could add tens of MB.
 - [ ] User: turn off Snipping Tool notifications (Settings → System → Notifications) so its toast doesn't
       compete with JustMark; keep "Automatically save screenshots" on.
 - [ ] Verify "Start at login" (now in the Settings window) by hand (not exercised in automation, to avoid

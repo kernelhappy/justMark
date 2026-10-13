@@ -77,7 +77,7 @@
 - **2026-10-13 — Rename as built** (handsoff, spec silent on these): identifier `io.github.justmark`; Cargo
   package `justmark`, so the exe is `justmark.exe` (Cargo's lowercase convention; Windows ignores case);
   file-association ProgID `JustMark.Image`; Start at login's Run value is named `JustMark`. Nothing migrates the old
-  config dir or an old `snarkymark` Run value (none existed on the dev box).
+  config dir or an old `snarkymark` Run value (the dev box has one, pointing at `snarkymark.exe`: left for the user).
 - **2026-10-13 — Re-croppable crop as built** (handsoff, spec silent): Reset only sets the box to the whole capture
   (Apply still needed), so a misclick on Reset loses nothing. A history step is `[shapes, crop]`; each applied crop's
   PNG is kept in memory for undo (a few MB each). The display still swaps in the cropped PNG (export path unchanged),

@@ -80,7 +80,7 @@ smaller image encoded first), Rust writes nothing and the markup stays unsaved: 
   - Page name: the URL hash carries the image stem (percent-encoded), used for `document.title`.
 - **Editor = JustSave's** (`markup.js`, `pdf.js` unchanged; `editor.js`/`index.html` from
   `result.js`/`result.html` at JustSave `5cece1b`). Shapes: highlighter, pen, line, arrow, rect, ellipse,
-  cloud, text, callout; filled box redacts (burned in on every export); crop; zoom; Save (PNG/JPG/PDF),
+  cloud, polygon, text, callout (see Editor features); markup is burned into every export, so opaque markup covers; crop; zoom; Save (PNG/JPG/PDF),
   Copy (PNG, `navigator.clipboard.write`), Print (`print()` of the burned-in PNG). JustMark-only
   changes: capture comes from `invoke('shot')` (JPEG normalized to PNG at load), always in markup
   (JustSave's Markup toggle is gone), Ctrl+S/Ctrl+C, Esc-to-close, no browser context menu (except in
@@ -103,14 +103,14 @@ smaller image encoded first), Rust writes nothing and the markup stays unsaved: 
 
 | | measured |
 |---|---|
-| Idle (tray only, no window) | 1.6–4.4 MB private working set (2026-10-13 with Settings + hotkey: 1.6 MB at start, 3.9 MB after the settings window or editors closed) |
-| One editor window open | ~100–105 MB private WS (7 processes) |
+| Idle (tray only, no window) | 1.6–4.4 MB private working set (2026-10-13 with Settings + hotkey: 1.6 MB at start, 3.9 MB after the settings window or editors closed; after the editor features: 1.6 MB at start, 3.7 MB after an editor closed) |
+| One editor window open | ~100–105 MB private WS (7 processes; 99.9 MB after the editor features, 2026-10-13) |
 | Watcher event → window shown | 0.44–0.60 s |
 | Mouse-up → file created (Snipping Tool) | ~150–190 ms (clipboard is ~80–100 ms) |
 
 So mouse-up → editor visible ≈ 0.6–0.8 s. Regressions past ~1 s or idle past ~10 MB need a reason.
 
-## Editor features (decided 2026-10-13, not built yet)
+## Editor features (decided and built 2026-10-13)
 
 - **Style per tool, remembered** (built). Each tool keeps its own colors, weight, fill/pattern, see-through and
   text size; restyling a selected shape updates its tool's style. Kept in localStorage (`style.<tool>`, screen px; shared by every
