@@ -23,3 +23,20 @@
   most of it irrelevant to the current tool). Markup toggle dropped: the window only exists to mark up.
   Format/Quality/Print moved into Save's menu (set once, rarely changed). Select stays the default tool so
   "snip, paste, Esc" is still one Esc.
+- **2026-10-13 — Bughunt morning list** (`reports/bughunt-2026-10-12.md`):
+  - rust-r4-1 (Save dialog error looks like Cancel): accepted as a known limit; our own IFileDialog isn't
+    worth ~50 lines of unsafe code for a rare failure.
+  - rust-r1-5 (one window per Create, bursts): handled by the Max windows setting, not a burst cap.
+  - Only Copy queues while an export runs; Save/Print presses while busy are dropped (a double-click on
+    Save queued a second dialog).
+  - Accepted: Fit width settles ~15 px narrower at the sizes that used to oscillate; `foo.jpg` saved as PNG
+    becomes `foo.jpg.png` (an existing one is overwritten without a prompt).
+  - Folder moves are rare one-time events, so no 3 s poll "for eternity": the parent folder is watched and
+    the location re-resolved only when the Screenshots folder goes away. Probed: notify reports nothing
+    when a watched folder itself is renamed or deleted, hence the parent watch.
+  - A page that breaks before `ready` shows at once (inline `onerror`), not after the 10 s watchdog.
+- **2026-10-13 — Settings window** (see SKILL.md Settings). A real window rather than tray check items
+  (user's choice). Auto copy fires on focus loss, not on every change. Hotkey default Shift+Alt+S, next to
+  Win+Shift+S in muscle memory. Rejected: Ctrl+Alt+S (JetBrains/Visual Studio; it's AltGr+S on Polish and
+  other layouts), Ctrl+Win+S (Windows Speech Recognition). PrtScn stays Windows' (user: leave it alone).
+  Max windows: prefer closing a window without unsaved work; with none, close the oldest anyway (user).
