@@ -542,3 +542,8 @@ for (const a of JSON.parse((await import('node:fs')).readFileSync('./src-tauri/t
   assert.strictEqual(newTextY(3, 20, 0), 0);
   assert.strictEqual(newTextY(100, 20, 0), 100 - 20 * 1.25 / 2);
 }
+// editor-r5-3: fixed at left:50%, #status shrink-to-fits into 50vw unless its width is set explicitly.
+{
+  const css = (await import('node:fs')).readFileSync('./src/index.html', 'utf8');
+  assert.match(css.match(/#status \{[^}]*\}/)[0], /width: max-content/);
+}
