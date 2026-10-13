@@ -44,6 +44,9 @@ export function snap([x0, y0], [x, y]) {
 const SIZES = [8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 40, 48, 64, 80, 96];
 export const nextSize = (px, dir) => (dir > 0 ? SIZES.find(v => v > px + 0.5) : SIZES.findLast(v => v < px - 0.5)) ?? px;
 
+// WebView2's reload keys (F5, Ctrl+R) would silently wipe unsaved markup.
+export const isReload = e => e.key === 'F5' || e.key === 'BrowserRefresh' || ((e.ctrlKey || e.metaKey) && (/^[a-z]$/i.test(e.key) ? e.key.toLowerCase() === 'r' : e.code === 'KeyR')); // same letter-or-physical rule as the shortcuts
+
 // Two-point shapes drag their ends, text scales from its corners, the rest resize by edges and corners.
 export const handles = s => s.pts?.length === 2 ? ['0', '1'] : s.size ? ['nw', 'ne', 'se', 'sw', ...(s.tip ? ['tip'] : [])] : ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
 

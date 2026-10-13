@@ -1,5 +1,5 @@
 import { canvasToPdf } from './pdf.js';
-import { toSvg, bounds, handles, move, resize, dragEdges, snap, nextSize, clean, LH, PAD } from './markup.js';
+import { toSvg, bounds, handles, move, resize, dragEdges, snap, nextSize, clean, isReload, LH, PAD } from './markup.js';
 
 const $ = id => document.getElementById(id);
 
@@ -500,6 +500,7 @@ onkeydown = e => {
     finishEdit();
     return e.repeat || run('print');
   }
+  if (isReload(e)) return e.preventDefault();
   if (gesture) return;
   if (cropping()) {
     if (e.key === 'Escape') endCrop();

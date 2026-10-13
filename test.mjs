@@ -101,6 +101,7 @@ for (const [active, ends] of [['edit', false], ['body', true]]) {
 }
 // Delete/Backspace on the Format or Quality radios must not delete the selected shape.
 globalThis.document = { querySelector: () => null }; // no Save menu open
+globalThis.isReload = (await import('./src/markup.js')).isReload; // editor.js imports it; the onkeydown harnesses below see it as a global
 {
   const src = (await import('node:fs')).readFileSync('./src/editor.js', 'utf8');
   let removed = 0;
@@ -409,5 +410,12 @@ globalThis.document = { querySelector: () => null }; // no Save menu open
     { copy: async () => { ran.push('copy'); return 'Copied'; } }, {}, () => status, { format: {} }, () => {}, () => '', () => true);
   await run('copy');
   assert.deepStrictEqual(ran, [], 'Copy exported while a crop was pending');
+}
+// critic-r1-1: WebView2 reload keys would wipe unsaved markup; the editor must swallow them.
+{
+  const { isReload } = await import('./src/markup.js');
+  for (const e of [{ key: 'F5' }, { key: 'F5', ctrlKey: true }, { key: 'r', ctrlKey: true }, { key: 'R', ctrlKey: true, shiftKey: true }, { key: 'BrowserRefresh' }, { key: 'к', code: 'KeyR', ctrlKey: true }])
+    assert(isReload(e), JSON.stringify(e));
+  for (const e of [{ key: 'r' }, { key: 'F6' }, { key: 's', ctrlKey: true }, { key: 'p', code: 'KeyR', ctrlKey: true }]) assert(!isReload(e), JSON.stringify(e));
 }
 console.log('ok');
