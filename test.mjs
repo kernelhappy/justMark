@@ -386,4 +386,13 @@ globalThis.document = { querySelector: () => null }; // no Save menu open
     assert.deepStrictEqual(log, ['fill #fff', 'rect', 'img'], fmt + ': transparent areas not flattened onto white');
   }
 }
+// An image that won't display (corrupt PNG with valid magic) must not stay saveable: Save would write the broken bytes and say "Saved" (export-r2-1).
+{
+  const src = (await import('node:fs')).readFileSync('./src/editor.js', 'utf8');
+  const status = {}, btn = {}, shot = {};
+  const png = new Function('$', 'show', 'shot', 'document', `let png = 'blob'; ${src.match(/shot\.onerror = .*/)[0]} shot.onerror(); return png;`)(
+    () => status, () => {}, shot, { querySelectorAll: () => [btn] });
+  assert.ok(!png, 'a broken image left png set, so Save and Copy still run');
+  assert.strictEqual(btn.disabled, true);
+}
 console.log('ok');

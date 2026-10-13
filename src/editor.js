@@ -142,7 +142,8 @@ shot.onload = () => {
   applyZoom();
   show(shot.naturalWidth, shot.naturalHeight); // the capture at actual size, plus the chrome
 };
-shot.onerror = () => { $('status').textContent ||= "Can't open this image."; show(0, 0); };
+// A PNG that passed the magic check but won't decode: disable everything as for a failed load, or Save writes the broken bytes.
+shot.onerror = () => { $('status').textContent ||= "Can't open this image."; png = null; for (const el of document.querySelectorAll('button, input')) el.disabled = true; show(0, 0); };
 if (!png) show(0, 0);
 onresize = () => { syncDpr(); applyZoom(); };
 // A move to a monitor with another scale factor can keep the CSS size and fire no resize; a resolution query still flips.
