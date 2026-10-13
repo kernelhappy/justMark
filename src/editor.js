@@ -1,5 +1,5 @@
 import { canvasToPdf, toDib } from './pdf.js';
-import { toSvg, bounds, handles, move, resize, dragEdges, snap, nextSize, clean, isReload, editBox, LH, PAD, clearScroll, newTextY, retext } from './markup.js';
+import { toSvg, pattern, bounds, handles, move, resize, dragEdges, snap, nextSize, clean, isReload, editBox, LH, PAD, clearScroll, newTextY, retext } from './markup.js';
 
 const $ = id => document.getElementById(id);
 
@@ -312,7 +312,9 @@ let shapes = [], hist = ['[[],null]'], step = 0, off = { x: 0, y: 0 }, tool = 's
 // format), one key per tool so two windows restyling different tools don't overwrite each other.
 const RED = '#e53935', STYLES = {
   hl: { c: '#fdd835', w: 4 }, pen: { c: RED, w: 4 }, line: { c: RED, w: 4 }, arrow: { c: RED, w: 4 },
-  rect: { c: RED, w: 4, fill: false }, ellipse: { c: RED, w: 4, fill: false }, cloud: { c: RED, w: 4, fill: false }, poly: { c: RED, w: 4, fill: false },
+  // fill: false or what it is (see FILLS); last: what Fill's button turns on; dn: pattern density.
+  rect: { c: RED, w: 4, fill: false, last: 'solid', dn: 1 }, ellipse: { c: RED, w: 4, fill: false, last: 'solid', dn: 1 },
+  cloud: { c: RED, w: 4, fill: false, last: 'solid', dn: 1 }, poly: { c: RED, w: 4, fill: false, last: 'solid', dn: 1 },
   text: { c: RED, size: 20, fc: null }, callout: { c: RED, w: 4, size: 20, fc: '#fff', tc: '#111' },
 };
 function styleOf(t) {
@@ -331,8 +333,13 @@ let colorTarget = 'line'; // the picker's pick
 const keyOf = t => TARGETS[t]?.[colorTarget] ?? Object.values(TARGETS[t] ?? { line: 'c' })[0];
 // The color a target shows (null: none). A fillable shape's fill is its line color until one is picked, and none while Fill is off.
 const colorOf = (s, t, key) => key !== 'fc' ? s[key] : 'fill' in STYLES[t] ? (s.fill ? s.fc ?? s.c : null) : s.fc ?? null;
-// What a swatch (null: the none swatch) changes: on a fillable shape's fill, a color also turns Fill on, and none turns it off.
-const swatch = (t, key, v) => key !== 'fc' || !('fill' in STYLES[t]) ? { [key]: v } : v ? { fc: v, fill: true } : { fill: false };
+// What a swatch (null: the none swatch) changes: on a fillable shape's fill, a color also turns Fill on (`on`: the fill it
+// has, else the tool's last), and none turns it off.
+const swatch = (t, key, v, on) => key !== 'fc' || !('fill' in STYLES[t]) ? { [key]: v } : v ? { fc: v, fill: on } : { fill: false };
+// Fill's menu: none, solid and the patterns (markup.js PATTERNS), in this order.
+const FILLS = [['none', 'None'], ['solid', 'Solid'], ['fwd', 'Diagonal ///'], ['back', 'Diagonal \\\\\\'], ['vert', 'Vertical |||'], ['horiz', 'Horizontal ==='],
+  ['grid', 'Grid ###'], ['cross', 'Crosshatch ×××'], ['dot1', 'Halftone light'], ['dot2', 'Halftone medium'], ['dot3', 'Halftone heavy'],
+  ['herring', 'Herringbone'], ['brick', 'Running bond brick'], ['check', 'Checkerboard']];
 // What the dock shows: the selected shape's style (in screen pixels), else the tool's.
 const styleNow = s => s ? { ...s, w: s.w / dpr, size: s.size / dpr } : styleOf(tool);
 const measure = new OffscreenCanvas(1, 1).getContext('2d');
@@ -380,6 +387,9 @@ function render() {
     b.style.setProperty('--c', c || 'transparent');
   }
   $('nonec').hidden = key !== 'fc';
+  const kind = now.fill === true ? 'solid' : now.fill || 'none';
+  for (const b of $('fks').children) b.setAttribute('aria-pressed', b.dataset.fk === kind);
+  $('density').value = now.dn ?? 1;
   // The dock shows only what applies to the selected shape, else to the tool: c(olor) w(idth) f(ill) s(ize) d(elete). Empty hides it.
   $('props').dataset.k = (KINDS[s?.type ?? tool] + (s ? ' d' : '')).trim();
   $('tsize').textContent = now.size ? Math.round(now.size) : '';
@@ -412,7 +422,12 @@ function remove() {
 // No browser menu (Back, Reload, Save as…); the text editor keeps its cut/copy/paste menu.
 oncontextmenu = e => e.target === edit || e.preventDefault();
 // A press must not blur an open text editor: finishEdit would delete an empty new text before the click lands.
-$('tools').onmousedown = $('props').onmousedown = $('zoombar').onmousedown = $('savemenu').onmousedown = $('status').onmousedown = e => e.preventDefault();
+$('tools').onmousedown = $('props').onmousedown = $('zoombar').onmousedown = $('savemenu').onmousedown = $('fillmenu').onmousedown = $('status').onmousedown = e => e.preventDefault();
+// Fill's menu, with a preview of each fill in the text color.
+$('fks').innerHTML = FILLS.map(([k, n]) => `<button data-fk="${k}" aria-label="${n}" data-tip="" class="tip-up"><svg viewBox="0 0 20 20">${
+  k === 'none' ? '<rect x=".5" y=".5" width="19" height="19" rx="3" fill="none" stroke="currentColor" stroke-opacity=".35"/><path d="M4 16 16 4" stroke="var(--danger)" stroke-width="1.5"/>'
+    : k === 'solid' ? '<rect width="20" height="20" rx="3" fill="currentColor"/>'
+    : `<defs>${pattern('pv-' + k, k, 'currentColor', 3)}</defs><rect width="20" height="20" rx="3" fill="url(#pv-${k})"/>`}</svg></button>`).join('');
 $('tools').onclick = $('props').onclick = ({ target, detail }) => {
   if (gesture) return;
   // A polygon being drawn is styled like a selected shape, but isn't committed until it closes.
@@ -442,16 +457,30 @@ $('tools').onclick = $('props').onclick = ({ target, detail }) => {
     // A style button restyles the selected shape and sets its tool's style (the next shape of that kind gets it too).
     // The target picker picks what the swatches color.
     if (d.target) { colorTarget = d.target; return render(); }
-    const t = s?.type ?? tool, ch = d.c ? swatch(t, keyOf(t), d.c === 'none' ? null : d.c) : 'fill' in d ? { fill: !styleNow(s).fill } : null;
+    // Fill's button turns the last fill on and off; its menu picks one (and makes it the last).
+    const t = s?.type ?? tool, now = styleNow(s), on = now.fill || styleOf(t).last || 'solid';
+    const ch = d.c ? swatch(t, keyOf(t), d.c === 'none' ? null : d.c, on) : 'fill' in d ? { fill: now.fill ? false : on }
+      : d.fk ? (d.fk === 'none' ? { fill: false } : { fill: d.fk, last: d.fk }) : null;
     if (!ch) return;
-    setStyle(t, ch);
-    if (s) {
-      shapes[i] = { ...s, ...ch };
-      return editing == null && poly == null ? commit() : render(); // an open edit commits its style with its text
-    }
+    return restyle(ch);
   }
   render();
 };
+// Sets the selected shape's (or the polygon being drawn's) style and its tool's, or the tool's. Committed unless `held`
+// (a slider being dragged) or the shape isn't in the history yet (an open edit commits its style with its text).
+function restyle(ch, held) {
+  const i = cur ?? poly, s = shapes[i];
+  setStyle(s?.type ?? tool, ch);
+  if (s) {
+    const { last, ...sc } = ch;
+    shapes[i] = { ...s, ...sc };
+  }
+  if (s && !held && editing == null && poly == null) commit();
+  else render();
+}
+// Density scales every pattern's spacing; dragging it is one undo step.
+$('density').oninput = ({ target }) => restyle({ dn: +target.value }, true);
+$('density').onchange = () => editing == null && poly == null && commit();
 // One step of weight (1–16 screen px) or text size (the size list) for the selected shape and its tool, or the tool.
 function stepStyle(k, d) {
   const i = cur ?? poly, s = shapes[i], now = styleNow(s), v = k === 'w' ? Math.min(16, Math.max(1, Math.round(now.w) + d)) : nextSize(now.size, d);
@@ -512,7 +541,7 @@ function newShape(p) {
   // dpr: arrowheads, callout pointers and cloud scallops keep the minimum size they had when drawn
   if (tool === 'arrow') return { type: tool, c, w, dpr, pts: [p, p] };
   if (tool === 'callout') return { type: tool, c, w, dpr, size, fc: st.fc, tc: st.tc, x: p[0], y: p[1], text: '', em: 0, tip: p };
-  return { type: tool, c, w, dpr, fill: st.fill, fc: st.fc, l: p[0], t: p[1], r: p[0], b: p[1] };
+  return { type: tool, c, w, dpr, fill: st.fill, fc: st.fc, dn: st.dn, l: p[0], t: p[1], r: p[0], b: p[1] };
 }
 const atInk = ev => { const [x, y] = at(ev); return [x + off.x, y + off.y]; };
 
@@ -525,7 +554,7 @@ function polyClick(e) {
   if (poly == null) {
     const st = styleOf('poly');
     cur = null;
-    poly = shapes.push({ type: 'poly', c: st.c, w: st.w * dpr, dpr, fill: st.fill, fc: st.fc, pts: [p, p], open: true }) - 1;
+    poly = shapes.push({ type: 'poly', c: st.c, w: st.w * dpr, dpr, fill: st.fill, fc: st.fc, dn: st.dn, pts: [p, p], open: true }) - 1;
   } else {
     const s = shapes[poly], pts = s.pts.slice(0, -1), q = e.shiftKey ? snap(pts.at(-1), p) : p;
     // The second press of a double-click lands on the point the first one added.

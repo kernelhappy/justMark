@@ -121,7 +121,7 @@ So mouse-up → editor visible ≈ 0.6–0.8 s. Regressions past ~1 s or idle pa
 - **Polygon (G)** (built): click adds a point; double-click, Enter or clicking the first point closes; Backspace
   drops the last point; Esc cancels the polygon in progress. Shift snaps the next edge to 45°. Weight,
   Fill and patterns as rect.
-- **Fill = split button** (rect, ellipse, cloud, polygon; not the callout box). Click toggles the tool's
+- **Fill = split button** (built; rect, ellipse, cloud, polygon; not the callout box). Click toggles the tool's
   last fill; ▾ opens a popover: none, solid, 13 patterns, and a density slider that scales every
   pattern's spacing. Patterns (SVG `<pattern>` in the fill color): `///`, `\\\`, `|||`, `===`, `###`
   grid, `×××` diagonal crosshatch, halftone light/medium/heavy (~15/35/60% dot coverage, by dot size),

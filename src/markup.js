@@ -1,6 +1,7 @@
 // Markup shapes, in pixels of the uncropped capture. One SVG serves the screen overlay and the export, so they match.
 // { type: 'pen'|'hl'|'line'|'arrow', c, w, pts: [[x, y], ...] }
-// { type: 'rect'|'ellipse'|'cloud', c, w, fill, fc, l, t, r, b }  fill: solid in fc (missing: c)
+// { type: 'rect'|'ellipse'|'cloud', c, w, fill, fc, dn, l, t, r, b }  fill: false, 'solid' (or true) or a PATTERNS key, in fc
+//   (missing: c); dn: pattern density
 // { type: 'poly', c, w, fill, fc, pts, open }  open: still being drawn (no fill, not closed)
 // { type: 'text', c, fc, size, x, y, text, em }  em: the widest line's width per unit of size; fc: background, null = none
 // { type: 'callout', c, w, size, fc, tc, x, y, text, em, tip: [x, y] }  fc: box (missing: white, null: none), tc: text (missing: #111)
@@ -77,6 +78,23 @@ export function resize(s, h, dx, dy) {
   return { ...n, x: to.l === ax ? ax : ax - (b.r - b.l), y: to.t === ay ? ay : ay - (b.b - b.t) };
 }
 
+// Fill patterns, in the fill color: [tile width, height, content, rotation], in tile units (8 screen px at density 1).
+const T = 0.2, bar = (x, y, w, h) => `<rect x="${x}" y="${y}" width="${w}" height="${h}"/>`;
+const dot = cover => `<circle cx=".5" cy=".5" r="${Math.round(Math.sqrt(cover / Math.PI) * 1000) / 1000}"/>`; // cover: share of the tile
+export const PATTERNS = {
+  fwd: [1, 1, bar(0, 0, T, 1), 45], back: [1, 1, bar(0, 0, T, 1), -45], vert: [1, 1, bar(0, 0, T, 1), 0], horiz: [1, 1, bar(0, 0, 1, T), 0],
+  grid: [1, 1, bar(0, 0, T, 1) + bar(0, 0, 1, T), 0], cross: [1, 1, bar(0, 0, T, 1) + bar(0, 0, 1, T), 45],
+  dot1: [1, 1, dot(0.15), 45], dot2: [1, 1, dot(0.35), 45], dot3: [1, 1, dot(0.6), 45],
+  herring: [2, 2, `<path d="M0 1L1 0M0 2L1 1M1 .5L2 1.5M1 -.5L2 .5M1 1.5L2 2.5" fill="none" stroke="currentColor" stroke-width="${T}" stroke-linecap="square"/>`, 0],
+  brick: [2, 2, bar(0, 0, 2, T) + bar(0, 1, 2, T) + bar(0, 0, T, 1) + bar(1, 1, T, 1), 0],
+  check: [2, 2, bar(0, 0, 1, 1) + bar(1, 1, 1, 1), 0],
+};
+// A <pattern> whose tile unit is u px.
+export const pattern = (id, kind, color, u) => {
+  const [w, h, body, r] = PATTERNS[kind];
+  return `<pattern id="${id}" patternUnits="userSpaceOnUse" width="${w}" height="${h}" patternTransform="rotate(${r}) scale(${f(u)})" fill="${color}" color="${color}">${body}</pattern>`;
+};
+
 // Scallops of about d along each side, bulging outward (the path runs clockwise).
 function cloud({ l, t, r, b, w }, dpr) {
   const c = [[l, t], [r, t], [r, b], [l, b], [l, t]], d = Math.max(w * 5, 12 * dpr);
@@ -88,10 +106,11 @@ function cloud({ l, t, r, b, w }, dpr) {
   return p + 'Z';
 }
 
-// pad > 0 draws a pad-wider outline instead, for hit testing.
-function draw(s, pad = 0, dpr = 1) {
+// pad > 0 draws a pad-wider outline instead, for hit testing (a patterned fill is hit as a solid one). i: the shape's index,
+// naming its pattern (see defs).
+function draw(s, pad = 0, dpr = 1, i = 0) {
   dpr = s.dpr ?? dpr; // the dpr the shape was drawn at, so zooming later doesn't change its export
-  const { c } = s, w = (s.type === 'hl' ? s.w * 4 : s.w) + pad, fill = s.fill ? s.fc ?? c : 'none';
+  const { c } = s, w = (s.type === 'hl' ? s.w * 4 : s.w) + pad, fill = !s.fill ? 'none' : PATTERNS[s.fill] && !pad ? `url(#jm${i})` : s.fc ?? c;
   const line = (d, more = '', fill = 'none') => `<path d="${d}" fill="${fill}" stroke="${c}" stroke-width="${f(w)}" stroke-linecap="round" stroke-linejoin="round"${more}/>`;
   const arrow = ([x0, y0], [x1, y1]) => {
     const d = Math.hypot(x1 - x0, y1 - y0), L = s.w * 3 + 12 * dpr, ux = (x1 - x0) / d || 0, uy = (y1 - y0) / d || 0, k = Math.min(L * 0.8, d);
@@ -125,10 +144,13 @@ function draw(s, pad = 0, dpr = 1) {
   return '';
 }
 
+// A patterned fill's <pattern>: tiles of 8 screen px (at the dpr the shape was drawn at) over its density.
+const defs = (s, i, dpr) => PATTERNS[s.fill] ? `<defs>${pattern('jm' + i, s.fill, s.fc ?? s.c, 8 * (s.dpr ?? dpr) / (s.dn || 1))}</defs>` : '';
+
 // v: the part of the uncropped capture showing, { x, y, w, h }. pad > 0 adds invisible, wider copies so thin shapes are easy to click.
 export const toSvg = (shapes, v, pad = 0, dpr = 1) =>
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${v.x} ${v.y} ${v.w} ${v.h}" width="${v.w}" height="${v.h}">` +
-  shapes.map((s, i) => `<g data-i="${i}">${draw(s, 0, dpr)}${pad ? `<g opacity="0">${draw(s, pad, dpr)}</g>` : ''}</g>`).join('') + '</svg>';
+  shapes.map((s, i) => `<g data-i="${i}">${defs(s, i, dpr)}${draw(s, 0, dpr, i)}${pad ? `<g opacity="0">${draw(s, pad, dpr, i)}</g>` : ''}</g>`).join('') + '</svg>';
 
 // The shape with new text (em: its widest line per unit of size). A callout left of or above its point keeps the edge facing
 // the point, so new text grows away from it rather than over it. It stops at the image's left/top edge (or where it already

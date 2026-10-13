@@ -91,3 +91,8 @@
   Save/Copy/Print, Auto copy) closes the polygon first, as an open text is finished first; with fewer than 3 points
   it is dropped. Undo while drawing therefore undoes the just-closed polygon (Redo brings it back). The first point
   and the double-click both count within 8 screen px. Unsaved work includes a polygon being drawn.
+- **2026-10-13 — Fill patterns as built** (handsoff): the spec says "13 patterns" but names 12 (`///`, `\\`, `|||`,
+  `===`, `###`, `×××`, three halftones, herringbone, brick, checkerboard); built the 12 named, nothing invented. Tile
+  = 8 screen px (at the shape's dpr) ÷ density; density slider 0.5–2 in 0.25 steps (higher = tighter), default 1;
+  lines are 0.2 of a tile. Halftones are dots on a 45° grid. Patterns are anchored to the capture, not the shape. A
+  shape's hit area stays solid under a pattern. A fill color picked on the Fill target keeps the pattern.

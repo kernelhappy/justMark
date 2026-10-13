@@ -94,7 +94,7 @@ const toolbar = ({ shapes = [], cur = null, editing = null, tool = 'select', dpr
   const tools = {};
   const get = new Function('$', 'shapes', 'commit', 'render', 'finishEdit', 'go', 'edit', 'localStorage', 'nextSize', 'cropping', 'stage',
     `let gesture = false, poly = null, endPoly = () => {}, cur = ${cur}, editing = ${editing}, tool = '${tool}', dpr = ${dpr}, remove; ${STYLE_SRC}
-    ${SRC.match(/\$\('tools'\)\.onmousedown = .*/)[0]}; ${SRC.match(/\$\('tools'\)\.onclick = [\s\S]*?\n};/)[0]} ${SRC.match(/function stepStyle\([\s\S]*?\n\}/)[0]}
+    ${SRC.match(/\$\('tools'\)\.onmousedown = .*/)[0]}; ${SRC.match(/\$\('tools'\)\.onclick = [\s\S]*?\n};/)[0]} ${SRC.match(/function stepStyle\([\s\S]*?\n\}/)[0]} ${SRC.match(/function restyle\([\s\S]*?\n\}/)[0]}
     return () => ({ cur, editing, styleOf });`)(
     () => tools, shapes, () => log.push('commit'), () => {}, () => log.push('finish'), () => log.push('go'), edit, store, nextSize, () => false, { dataset: {} });
   return { tools, click: dataset => tools.onclick({ target: { closest: () => ({ dataset }) } }), get, store, log };
@@ -103,7 +103,7 @@ const toolbar = ({ shapes = [], cur = null, editing = null, tool = 'select', dpr
   const shapes = [{ type: 'rect', c: 'red', w: 8, fill: false }, { type: 'line', c: 'red', w: 8, pts: [] }];
   const t = toolbar({ shapes, cur: 0, dpr: 2 });
   t.click({ fill: '' });
-  assert.deepStrictEqual([shapes[0].fill, t.get().styleOf('rect').fill, t.get().styleOf('ellipse').fill], [true, true, false], 'Fill on a selected rect');
+  assert.deepStrictEqual([shapes[0].fill, t.get().styleOf('rect').fill, t.get().styleOf('ellipse').fill], ['solid', 'solid', false], 'Fill on a selected rect');
   t.click({ c: 'blue' });
   assert.deepStrictEqual([shapes[0].c, t.get().styleOf('rect').c, t.get().styleOf('line').c], ['blue', 'blue', '#e53935'], 'color went to another tool');
   const u = toolbar({ shapes, cur: 1, dpr: 2, store: t.store });
@@ -661,7 +661,7 @@ for (const a of JSON.parse((await import('node:fs')).readFileSync('./src-tauri/t
   const t = toolbar({ shapes, cur: 0 });
   t.click({ target: 'fill' });
   t.click({ c: 'blue' });
-  assert.deepStrictEqual([shapes[0].fc, shapes[0].fill, t.get().styleOf('rect').fc], ['blue', true, 'blue'], 'a fill color did not turn Fill on');
+  assert.deepStrictEqual([shapes[0].fc, shapes[0].fill, t.get().styleOf('rect').fc], ['blue', 'solid', 'blue'], 'a fill color did not turn Fill on');
   t.click({ c: 'none' });
   assert.deepStrictEqual([shapes[0].fill, shapes[0].fc], [false, 'blue'], 'none did not turn Fill off');
   t.click({ target: 'line' }); t.click({ c: 'green' });
@@ -717,4 +717,26 @@ for (const a of JSON.parse((await import('node:fs')).readFileSync('./src-tauri/t
     () => {}, () => {}, () => false, () => done.push('remove'), {}, () => {}, () => {}, { dataset: {} }, () => done.push('close'), () => done.push('cancel'), () => done.push('end'), () => done.push('drop'));
   for (const key of ['Escape', 'Enter', 'Backspace']) k({ key, target: { tagName: 'BODY' }, preventDefault() {} });
   assert.deepStrictEqual(done, ['cancel', 'end', 'drop']);
+}
+// Fill patterns: the menu picks one (and makes it the last); Fill's button toggles the last; a fill color keeps the pattern;
+// density scales the tile; each pattern is a <pattern> the shape's fill points at, in the fill color.
+{
+  const { PATTERNS } = await import('./src/markup.js');
+  const shapes = [{ type: 'rect', c: 'red', w: 4, dpr: 1, fill: false, l: 0, t: 0, r: 50, b: 50 }], t = toolbar({ shapes, cur: 0 });
+  t.click({ fk: 'cross' });
+  assert.deepStrictEqual([shapes[0].fill, t.get().styleOf('rect').last, 'last' in shapes[0]], ['cross', 'cross', false]);
+  t.click({ fill: '' }); t.click({ fill: '' });
+  assert.strictEqual(shapes[0].fill, 'cross', "Fill's button did not bring the last pattern back");
+  t.click({ target: 'fill' }); t.click({ c: 'blue' });
+  assert.deepStrictEqual([shapes[0].fill, shapes[0].fc], ['cross', 'blue'], 'a fill color replaced the pattern');
+  t.click({ fk: 'none' });
+  assert.strictEqual(shapes[0].fill, false);
+  assert.strictEqual(Object.keys(PATTERNS).length, 12);
+  for (const k of Object.keys(PATTERNS)) {
+    const svg = toSvg([{ ...shapes[0], fill: k, fc: 'blue', dn: 2 }], { x: 0, y: 0, w: 9, h: 9 }, 8);
+    assert.match(svg, /<pattern id="jm0" [^>]*scale\(4\)" fill="blue" color="blue">/, `${k}: tile not 8 px / density 2, or not in the fill color`);
+    assert.match(svg, /<g data-i="0"><defs>.*<\/defs><path [^>]*fill="url\(#jm0\)"/, `${k}: shape does not use its pattern`);
+    assert.match(svg, /<g opacity="0"><path [^>]*fill="blue"/, `${k}: hit outline not solid`);
+  }
+  assert.match(toSvg([{ ...shapes[0], fill: true, fc: undefined }], { x: 0, y: 0, w: 9, h: 9 }), /fill="red"/, 'an old boolean fill is solid');
 }

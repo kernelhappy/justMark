@@ -89,6 +89,18 @@
   #savemenu:popover-open { opacity: 1; translate: 0 0; }
   @starting-style { #savemenu:popover-open { opacity: 0; translate: 0 -6px; } }
   .split { anchor-name: --save; }
+  .fsplit { anchor-name: --fill; }
+  .fsplit > button { height: 34px; }
+  #fillmenu {
+    inset: auto; margin: 0 0 8px; position-area: top; position-anchor: --fill; overflow: visible;
+    padding: 10px; border: 1px solid var(--line); border-radius: 12px; color: var(--text); background: var(--solid); box-shadow: var(--shadow);
+  }
+  .fks { display: grid; grid-template-columns: repeat(7, 34px); gap: 2px; margin-bottom: 10px; }
+  .fks button { padding: 0; }
+  .fks svg { width: 20px; height: 20px; }
+  .fks [aria-pressed=true] { background: var(--accent-soft); color: var(--accent); }
+  #fillmenu .field { margin: 0; }
+  #density { width: 100%; accent-color: var(--accent); }
   .field { display: grid; gap: 6px; margin-bottom: 10px; }
   .field > span { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
   .radios { display: flex; padding: 3px; border-radius: 8px; background: var(--hover); }
@@ -298,7 +310,14 @@
       <button data-step="w" data-d="1" aria-label="Thicker" data-tip="&#10;Hold to repeat" class="tip-up"><svg class="i"><use href="#i-plus"/></svg></button>
     </div>
     <div class="g g-f">
-      <button data-fill aria-label="Fill" data-tip="&#10;A filled black box redacts what's under it" class="tip-up"><svg class="i"><use href="#i-fill"/></svg></button>
+      <div class="split fsplit">
+        <button data-fill aria-label="Fill" data-tip="&#10;Covers what's under it in every export (patterns don't)" class="tip-up"><svg class="i"><use href="#i-fill"/></svg></button>
+        <button popovertarget="fillmenu" aria-label="Fill pattern and density" data-tip="" class="tip-up"><svg class="i"><use href="#i-down"/></svg></button>
+      </div>
+      <div id="fillmenu" popover>
+        <div id="fks" class="fks"></div>
+        <label class="field"><span>Density</span><input type="range" id="density" min="0.5" max="2" step="0.25"></label>
+      </div>
     </div>
     <div class="g g-s">
       <button data-step="size" data-d="-1" aria-label="Smaller text" data-tip="&#10;Hold to repeat" class="tip-up aa" style="font-size:11px">A</button>
