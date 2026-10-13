@@ -331,7 +331,7 @@ async fn save(w: WebviewWindow, shots: State<'_, Shots>, req: Request<'_>) -> Re
         _ => return Err(format!("can't save as {ext:?}")),
     };
     let stem = shots.0.lock().unwrap().get(w.label()).and_then(|s| s.path.file_stem().map(|n| n.to_string_lossy().into_owned()));
-    let file_name = format!("{}.{ext}", stem.unwrap_or_else(|| "JustMark".into()));
+    let file_name = format!("{}.{ext}", stem.unwrap_or_else(|| "justMark".into()));
     let filter = ext.to_owned();
     let Some(path) = blocking(move || rfd::FileDialog::new().set_parent(&w).set_file_name(file_name).add_filter(kind, &[filter]).save_file()).await?
     else {
@@ -669,8 +669,8 @@ fn open_settings(app: &AppHandle) {
         return;
     }
     let built = WebviewWindowBuilder::new(app, "settings", WebviewUrl::App("settings.html".into()))
-        .title("JustMark settings")
-        .inner_size(440.0, 400.0)
+        .title("justMark settings")
+        .inner_size(440.0, 480.0)
         .resizable(false)
         .maximizable(false)
         .minimizable(false)
@@ -681,12 +681,12 @@ fn open_settings(app: &AppHandle) {
     }
 }
 
-/// The settings window's view: the settings, whether the hotkey is registered, and whether Start at login is on.
+/// The settings window's view: the settings, whether the hotkey is registered, whether Start at login is on, and the version.
 #[tauri::command]
-fn settings(app: AppHandle, cfg: State<Config>) -> (Settings, bool, bool) {
+fn settings(app: AppHandle, cfg: State<Config>) -> (Settings, bool, bool, String) {
     let s = cfg.0.lock().unwrap().clone();
     let held = hotkey_held(&app, &s.hotkey);
-    (s, held, app.state::<auto_launch::AutoLaunch>().is_enabled().unwrap_or(false))
+    (s, held, app.state::<auto_launch::AutoLaunch>().is_enabled().unwrap_or(false), app.package_info().version.to_string())
 }
 
 /// Applies and stores the settings window's values. Returns whether the hotkey could be registered.
@@ -723,6 +723,7 @@ fn context_verb(base: &str, exe: &Path, on: bool) -> std::io::Result<()> {
         let key = format!(r"{base}\.{ext}\shell\JustMark");
         if on {
             let (verb, _) = hkcu.create_subkey(&key)?;
+            verb.set_value("MUIVerb", &"justMark")?; // the menu text; the key keeps its old name
             verb.set_value("Icon", &format!("\"{}\",0", exe.display()))?;
             verb.create_subkey("command")?.0.set_value("", &format!("\"{}\" \"%1\"", exe.display()))?;
         } else if let Err(e) = hkcu.delete_subkey_all(&key) {
@@ -818,10 +819,10 @@ fn main() {
             }
             app.manage(a);
             let settings = MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
-            let quit = MenuItem::with_id(app, "quit", "Quit JustMark", true, None::<&str>)?;
+            let quit = MenuItem::with_id(app, "quit", "Quit justMark", true, None::<&str>)?;
             TrayIconBuilder::new()
                 .icon(app.default_window_icon().unwrap().clone())
-                .tooltip("JustMark")
+                .tooltip("justMark")
                 .menu(&Menu::with_items(app, &[&settings, &quit])?)
                 .on_menu_event(|app, e| match e.id().as_ref() {
                     "quit" => app.exit(0),

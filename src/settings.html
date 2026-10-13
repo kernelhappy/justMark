@@ -1,6 +1,6 @@
 <!doctype html>
 <meta charset="utf-8">
-<title>JustMark settings</title>
+<title>justMark settings</title>
 <style>
   :root {
     color-scheme: light dark;
@@ -25,7 +25,9 @@
   #key[aria-pressed=true] { outline: 2px solid var(--accent); }
   #taken, #err { color: var(--danger); }
   [hidden] { display: none !important; }
+  header { display: flex; align-items: flex-end; justify-content: space-between; padding: 8px 0 12px; border-bottom: 1px solid var(--line); }
 </style>
+<header><picture><source srcset="assets/logo-dark.png" media="(prefers-color-scheme: dark)"><img src="assets/logo-light.png" alt="justMark" width="240"></picture><span class="hint" id="ver"></span></header>
 <form id="f">
   <label><span class="name">Auto open on snip<span class="hint">Off: snips only land in the Screenshots folder.</span></span><input type="checkbox" name="autoOpen"></label>
   <div class="row"><span class="name">Open latest snip<span class="hint" id="taken" hidden>Taken by another app, or not usable: pick another.</span></span>
@@ -33,7 +35,7 @@
   <label><span class="name">New snip opens a new window<span class="hint">Off: it goes into the last-used editor, unless that has unsaved markup.</span></span><input type="checkbox" name="newWindow"></label>
   <label><span class="name">Max windows<span class="hint">One more closes the oldest, without unsaved markup if any.</span></span><input type="number" name="maxWindows" min="1" max="50" required></label>
   <label><span class="name">Auto copy on focus loss<span class="hint">Leaving an editor with unsaved markup copies it.</span></span><input type="checkbox" name="autoCopy"></label>
-  <label><span class="name">Right-click "JustMark" in Explorer<span class="hint">On images (png, jpg, bmp, gif, webp). Windows 11: under Show more options.</span></span><input type="checkbox" name="contextMenu"></label>
+  <label><span class="name">Right-click "justMark" in Explorer<span class="hint">On images (png, jpg, bmp, gif, webp). Windows 11: under Show more options.</span></span><input type="checkbox" name="contextMenu"></label>
   <label><span class="name">Start at login</span><input type="checkbox" id="login"></label>
   <p id="err" hidden></p>
 </form>
@@ -56,7 +58,7 @@
     try { err.hidden = true; show(await invoke('set_settings', { s: { ...s } })); }
     catch (e) { err.textContent = e; err.hidden = false; }
   });
-  invoke('settings').then(([v, held, login]) => { s = v; show(held); document.getElementById('login').checked = login; });
+  invoke('settings').then(([v, held, login, ver]) => { s = v; show(held); document.getElementById('login').checked = login; document.getElementById('ver').textContent = 'Version ' + ver; });
   f.onchange = ({ target: t }) => {
     if (t.id === 'login') return invoke('login').then(on => { t.checked = on; }); // the entry's real state
     if (t.name === 'maxWindows' && !t.checkValidity()) return;
