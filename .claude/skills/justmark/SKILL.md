@@ -45,6 +45,7 @@ window-opening rules apply before any page exists); a missing file or field mean
 | Max windows | 5 | Opening one more closes the oldest-**opened** window **without** unsaved work; if every window has unsaved work, the oldest closes anyway, silently (user's call: bounds memory on bursts, e.g. bulk copies or OneDrive sync-down). Counts every editor, however it was opened. |
 | Auto copy on focus loss | off | When an editor loses focus and has unsaved work, it copies the marked-up PNG (same as Copy, so Esc then closes without asking; but it still counts as unsaved work for Max windows and replace-in-place, since taking a snip is itself a focus loss). Not for focus lost to its own Save/Print dialog or close confirm. |
 | Start at login | off | HKCU Run entry, quoted exe path, via the `auto-launch` crate in CurrentUser mode. The checkbox flips the entry's real state (Task Manager can change it behind the window). |
+| Right-click "JustMark" in Explorer | on | The classic verb on images (see Explorer right-click), written under HKCU when on, removed when off; re-pointed at this exe at startup. |
 
 "Unsaved work" = the same check as Esc's confirm (markup or crop not Saved or Copied since), plus a text
 being typed or a stroke being drawn. The page reports it to Rust (`dirty`) whenever it changes.
@@ -73,7 +74,8 @@ smaller image encoded first), Rust writes nothing and the markup stays unsaved: 
   - `close` → destroy the window.
   - `dirty(d)` → this editor has unsaved work (see Settings). `clip` → body = PNG then CF_DIB, header
     `png` = the PNG's length; false when a newer copy happened (see Settings).
-  - Settings window: `settings` → [settings, hotkey registered, Start at login on]; `set_settings(s)` →
+  - Settings window: `settings` → [settings, hotkey registered, Start at login on]; `set_settings(s)` (also writes or
+    removes the right-click verb when `contextMenu` changes) →
     hotkey registered; `login` → flips Start at login, returns the real state.
   - Page name: the URL hash carries the image stem (percent-encoded), used for `document.title`.
 - **Editor = JustSave's** (`markup.js`, `pdf.js` unchanged; `editor.js`/`index.html` from
@@ -139,7 +141,7 @@ So mouse-up → editor visible ≈ 0.6–0.8 s. Regressions past ~1 s or idle pa
   the whole original with the current crop as the box; the crop bar is Reset (whole capture) · Cancel ·
   Apply; each applied crop is one undo step. The Undo crop button goes.
 
-## Explorer right-click (decided 2026-10-13, not built yet)
+## Explorer right-click (decided and built 2026-10-13)
 
 - Classic verb **JustMark** on png, jpg, jpeg, bmp, gif, webp:
   `HKCU\Software\Classes\SystemFileAssociations\.<ext>\shell\JustMark\command` = `"<exe>" "%1"`. The app

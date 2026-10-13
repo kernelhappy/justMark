@@ -591,11 +591,13 @@ struct Settings {
     new_window: bool,
     max_windows: usize,
     auto_copy: bool,
+    /// The Explorer right-click "JustMark" verb (see `context_verb`).
+    context_menu: bool,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Settings { auto_open: true, hotkey: "Shift+Alt+KeyS".into(), new_window: true, max_windows: 5, auto_copy: false }
+        Settings { auto_open: true, hotkey: "Shift+Alt+KeyS".into(), new_window: true, max_windows: 5, auto_copy: false, context_menu: true }
     }
 }
 
@@ -604,7 +606,7 @@ struct Config(Mutex<Settings>, PathBuf);
 #[test]
 fn settings_fill_missing_fields_with_defaults() {
     let s: Settings = serde_json::from_str(r#"{"autoOpen":false}"#).unwrap();
-    assert!(!s.auto_open && s.new_window && s.max_windows == 5 && s.hotkey == "Shift+Alt+KeyS");
+    assert!(!s.auto_open && s.new_window && s.max_windows == 5 && s.hotkey == "Shift+Alt+KeyS" && s.context_menu);
 }
 
 /// Registers the Open latest snip hotkey in place of the old one. False when it can't be had (another app holds it,
@@ -668,7 +670,7 @@ fn open_settings(app: &AppHandle) {
     }
     let built = WebviewWindowBuilder::new(app, "settings", WebviewUrl::App("settings.html".into()))
         .title("JustMark settings")
-        .inner_size(440.0, 340.0)
+        .inner_size(440.0, 400.0)
         .resizable(false)
         .maximizable(false)
         .minimizable(false)
@@ -701,9 +703,53 @@ async fn set_settings(app: AppHandle, cfg: State<'_, Config>, s: Settings) -> Re
             .and_then(|_| std::fs::write(&part, json))
             .and_then(|_| std::fs::rename(&part, &cfg.1))
             .map_err(|e| format!("couldn't save settings: {e}"))?;
-        std::mem::replace(&mut *cur, s.clone()).hotkey
+        std::mem::replace(&mut *cur, s.clone())
     };
-    Ok((old == s.hotkey && hotkey_held(&app, &old)) || set_hotkey(&app, &s.hotkey))
+    if old.context_menu != s.context_menu {
+        std::env::current_exe().and_then(|exe| context_verb(VERB_BASE, &exe, s.context_menu)).map_err(|e| format!("couldn't change the right-click entry: {e}"))?;
+    }
+    Ok((old.hotkey == s.hotkey && hotkey_held(&app, &old.hotkey)) || set_hotkey(&app, &s.hotkey))
+}
+
+/// The image types the right-click verb is on (the watcher stays png/jpg/jpeg; see `is_image`).
+const VERB_EXTS: [&str; 6] = ["png", "jpg", "jpeg", "bmp", "gif", "webp"];
+
+/// The classic Explorer verb "JustMark" on image files, for the current user (no admin, works for the bare dev exe):
+/// `<base>\.<ext>\shell\JustMark\command` = `"<exe>" "%1"`, written when `on` (re-pointing it at this exe), removed when not.
+/// `base` is `Software\Classes\SystemFileAssociations` (tests use a scratch key). On Windows 11 it is under Show more options.
+fn context_verb(base: &str, exe: &Path, on: bool) -> std::io::Result<()> {
+    let hkcu = winreg::RegKey::predef(winreg::enums::HKEY_CURRENT_USER);
+    for ext in VERB_EXTS {
+        let key = format!(r"{base}\.{ext}\shell\JustMark");
+        if on {
+            let (verb, _) = hkcu.create_subkey(&key)?;
+            verb.set_value("Icon", &format!("\"{}\",0", exe.display()))?;
+            verb.create_subkey("command")?.0.set_value("", &format!("\"{}\" \"%1\"", exe.display()))?;
+        } else if let Err(e) = hkcu.delete_subkey_all(&key) {
+            if e.kind() != std::io::ErrorKind::NotFound {
+                return Err(e);
+            }
+        }
+    }
+    Ok(())
+}
+
+const VERB_BASE: &str = r"Software\Classes\SystemFileAssociations";
+
+#[test]
+fn context_verb_is_written_quoted_and_removed() {
+    let base = r"Software\JustMarkTest\SystemFileAssociations";
+    let exe = Path::new(r"C:\Users\John Smith\justmark.exe");
+    context_verb(base, exe, true).unwrap();
+    let hkcu = winreg::RegKey::predef(winreg::enums::HKEY_CURRENT_USER);
+    for ext in VERB_EXTS {
+        let cmd: String = hkcu.open_subkey(format!(r"{base}\.{ext}\shell\JustMark\command")).unwrap().get_value("").unwrap();
+        assert_eq!(cmd, r#""C:\Users\John Smith\justmark.exe" "%1""#);
+    }
+    context_verb(base, exe, false).unwrap();
+    context_verb(base, exe, false).unwrap(); // already gone: not an error
+    assert!(hkcu.open_subkey(format!(r"{base}\.png\shell\JustMark")).is_err());
+    let _ = hkcu.delete_subkey_all(r"Software\JustMarkTest");
 }
 
 /// Start at login, flipped from the entry's real state, not the checkbox's: Task Manager can change it behind a stale
@@ -755,6 +801,10 @@ fn main() {
             let s: Settings = std::fs::read(&file).ok().and_then(|b| serde_json::from_slice(&b).map_err(|e| log!("settings.json: {e}")).ok()).unwrap_or_default();
             if !set_hotkey(&h, &s.hotkey) {
                 log!("hotkey {} is taken", s.hotkey);
+            }
+            // The right-click verb follows the setting, re-pointed at this exe (like Start at login, a moved or dev exe).
+            if let Err(e) = context_verb(VERB_BASE, &std::env::current_exe()?, s.context_menu) {
+                log!("right-click entry: {e}");
             }
             app.manage(Config(Mutex::new(s), file));
             for a in std::env::args_os().skip(1) {

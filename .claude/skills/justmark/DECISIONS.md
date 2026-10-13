@@ -99,3 +99,6 @@
 - **2026-10-13 — Dock compacted** (handsoff): with color targets, Fill's split button and See-through, a rect's dock
   reached 685 CSS px and crowded the zoom pill at the 960 px minimum width. Swatches went 30 → 26 px and the dock's
   group gap 14 → 10 px: a rect's dock is 609 px, a callout's 651 px at 960 wide, no overlap.
+- **2026-10-13 — Right-click verb as built** (handsoff, spec silent): when the setting is off, startup removes the verb
+  (so a stale one from a moved exe can't linger); the verb gets the exe's icon (`Icon` value); written with the
+  `winreg` crate (already in the tree via auto-launch). No SHChangeNotify: Explorer reads classic verbs live.

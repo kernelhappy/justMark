@@ -33,6 +33,7 @@
   <label><span class="name">New snip opens a new window<span class="hint">Off: it goes into the last-used editor, unless that has unsaved markup.</span></span><input type="checkbox" name="newWindow"></label>
   <label><span class="name">Max windows<span class="hint">One more closes the oldest, without unsaved markup if any.</span></span><input type="number" name="maxWindows" min="1" max="50" required></label>
   <label><span class="name">Auto copy on focus loss<span class="hint">Leaving an editor with unsaved markup copies it.</span></span><input type="checkbox" name="autoCopy"></label>
+  <label><span class="name">Right-click "JustMark" in Explorer<span class="hint">On images (png, jpg, bmp, gif, webp). Windows 11: under Show more options.</span></span><input type="checkbox" name="contextMenu"></label>
   <label><span class="name">Start at login</span><input type="checkbox" id="login"></label>
   <p id="err" hidden></p>
 </form>
@@ -43,7 +44,7 @@
   // Stored as global-hotkey reads it, with DOM key codes ("Shift+Alt+KeyS"); shown as "Shift+Alt+S".
   const shown = k => k ? k.replace(/Key|Digit/, '').replace('Super', 'Win') : 'None';
   const show = held => {
-    for (const n of ['autoOpen', 'newWindow', 'autoCopy']) f[n].checked = s[n];
+    for (const n of ['autoOpen', 'newWindow', 'autoCopy', 'contextMenu']) f[n].checked = s[n];
     f.maxWindows.value = s.maxWindows;
     key.textContent = shown(s.hotkey);
     document.getElementById('taken').hidden = held;
