@@ -110,7 +110,8 @@ document.onclick = ({ target }) => run(target.dataset.act);
 // The fit modes never enlarge past actual size.
 const shot = $('shot'), header = document.querySelector('header');
 // The header is fixed, not sticky, so it stays put when a zoomed-in capture scrolls sideways; pad the page by its height.
-new ResizeObserver(() => { document.body.style.paddingTop = header.offsetHeight + 'px'; applyZoom(); }).observe(header); // status text or the Quality select can wrap it
+// Height only: its width follows the page's vertical scrollbar, which Fit width can toggle, and re-fitting on that would flip forever.
+let headH; new ResizeObserver(() => { if (header.offsetHeight === headH) return; document.body.style.paddingTop = (headH = header.offsetHeight) + 'px'; applyZoom(); }).observe(header); // status text or the Quality select can wrap it
 let zoom = 'fit', scale = 1;
 function applyZoom() {
   const w = shot.naturalWidth / devicePixelRatio, h = shot.naturalHeight / devicePixelRatio;
@@ -122,6 +123,8 @@ function applyZoom() {
   document.body.style.setProperty('--actual', w + 'px'); // print at Actual size, not one CSS px per image pixel
   // Fit can drop the old layout's vertical scrollbar, which fires no resize: measure again without it (only on widening, so it can't loop).
   if (zoom === 'fit' && document.documentElement.clientWidth > cw) return applyZoom();
+  // Fit width can add a vertical scrollbar: measure again with it so the capture doesn't overflow (only on narrowing, so it can't loop).
+  if (zoom === 'width' && document.documentElement.clientWidth < cw) return applyZoom();
   $('zoom').textContent = Math.round(scale * 100) + '%';
   render();
 }

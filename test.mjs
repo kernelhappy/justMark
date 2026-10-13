@@ -147,10 +147,21 @@ globalThis.document = { querySelector: () => null }; // no Save menu open
   assert.equal(get2(), (1000 - 32) / 2000, 'Fit kept the width of a scrollbar that went away');
   // A header that changes height (status text, Quality select) re-runs the Fit math, not only the page padding.
   let ro, zoomed = 0;
-  new Function('ResizeObserver', 'document', 'header', 'applyZoom', src.match(/new ResizeObserver\(.*/)[0])(
+  new Function('ResizeObserver', 'document', 'header', 'applyZoom', src.match(/.*new ResizeObserver\(.*/)[0])(
     class { constructor(f) { ro = f; } observe() {} }, { body: { style: {} } }, { offsetHeight: 120 }, () => zoomed++);
   ro();
   assert.equal(zoomed, 1, 'header resize did not re-run applyZoom');
+  // Fit width where the capture needs a vertical scrollbar only at the wider width must settle, not flip every frame (editor-r2-1).
+  const cap = { naturalWidth: 1200, naturalHeight: 700, style: {} }, cwNow = () => parseFloat(cap.style.width) * 7 / 12 > 560 ? 985 : 1000;
+  let ro2;
+  const apply3 = new Function('$', 'shot', 'header', 'document', 'innerHeight', 'devicePixelRatio', 'render', 'ResizeObserver', `let zoom = 'width', scale = 1; ${src.match(/.*new ResizeObserver\(.*/)[0]}\n${src.match(/function applyZoom\(\) \{[\s\S]*?\n\}/)[0]} return applyZoom;`)(
+    () => label, cap, { offsetHeight: 90 }, { documentElement: { get clientWidth() { return cwNow(); } }, body: { style: { setProperty() {} } } }, 722, 1, () => {},
+    class { constructor(f) { ro2 = f; } observe() {} });
+  let last = cwNow(), fires = 0;
+  apply3();
+  while (cwNow() !== last && fires < 10) { last = cwNow(); fires++; ro2(); } // the fixed header's width follows the scrollbar
+  assert.ok(fires < 10, 'Fit width kept flipping the scrollbar');
+  assert.ok(parseFloat(cap.style.width) + 32 <= cwNow(), `Fit width ${cap.style.width} overflows ${cwNow()}px`);
 }
 // Zooming the browser keeps the picked width and text size in screen pixels, and the pressed-state match exact.
 {
