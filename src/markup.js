@@ -1,6 +1,7 @@
 // Markup shapes, in pixels of the uncropped capture. One SVG serves the screen overlay and the export, so they match.
 // { type: 'pen'|'hl'|'line'|'arrow', c, w, pts: [[x, y], ...] }
 // { type: 'rect'|'ellipse'|'cloud', c, w, fill, fc, l, t, r, b }  fill: solid in fc (missing: c)
+// { type: 'poly', c, w, fill, fc, pts, open }  open: still being drawn (no fill, not closed)
 // { type: 'text', c, fc, size, x, y, text, em }  em: the widest line's width per unit of size; fc: background, null = none
 // { type: 'callout', c, w, size, fc, tc, x, y, text, em, tip: [x, y] }  fc: box (missing: white, null: none), tc: text (missing: #111)
 export const LH = 1.25, PAD = 0.4; // line height and callout padding, in font sizes
@@ -110,6 +111,7 @@ function draw(s, pad = 0, dpr = 1) {
       return line(`M${l} ${cy}A${rx} ${ry} 0 1 0 ${r} ${cy}A${rx} ${ry} 0 1 0 ${l} ${cy}Z`, '', fill);
     }
     case 'cloud': return line(cloud(s, dpr), '', fill);
+    case 'poly': return s.open ? line(path(s.pts)) : line(path(s.pts) + 'Z', '', fill);
     case 'text': {
       if (pad) return `<path d="${rectD(bounds(s))}"/>`;
       const b = bounds(s), q = 0.15 * s.size; // a background reaches a little past the glyphs

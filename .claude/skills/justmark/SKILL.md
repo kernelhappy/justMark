@@ -85,7 +85,7 @@ smaller image encoded first), Rust writes nothing and the markup stays unsaved: 
   the text editor), and the UI below.
 - **UI layout** (redesign 2026-10-12, `index.html` only; no framework, no icon font — inline SVG sprite):
   - *Top bar*: tool segment (each tool has a one-letter key in `data-key`, which is also the binding:
-    V H P L A R E C T B; X = Crop) · Crop · Undo / Redo · Copy · Save split button. Save's
+    V H P L A R E C G T B; X = Crop) · Crop · Undo / Redo · Copy · Save split button. Save's
     label shows the format Ctrl+S will write; its ▾ opens a popover (Format, Quality for JPG/PDF, Print).
   - *Style dock* (floating, bottom center): only what applies to the selected shape, else the current
     tool (`KINDS` in editor.js → `#props[data-k]`); hidden for Select with nothing selected. While
@@ -118,7 +118,7 @@ So mouse-up → editor visible ≈ 0.6–0.8 s. Regressions past ~1 s or idle pa
   then after 400 ms ~12 steps/s until release or the pointer leaves. Text size's −/+ repeat the same way.
   A held run on a selected shape is one undo step.
 - **Callout tail stays drawn while its text is being typed** (built): the box and tail follow the editor live.
-- **Polygon (G):** click adds a point; double-click, Enter or clicking the first point closes; Backspace
+- **Polygon (G)** (built): click adds a point; double-click, Enter or clicking the first point closes; Backspace
   drops the last point; Esc cancels the polygon in progress. Shift snaps the next edge to 45°. Weight,
   Fill and patterns as rect.
 - **Fill = split button** (rect, ellipse, cloud, polygon; not the callout box). Click toggles the tool's

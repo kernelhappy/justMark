@@ -93,7 +93,7 @@ const STYLE_SRC = SRC.match(/const RED = [\s\S]*?\nconst styleNow = .*/)[0]; // 
 const toolbar = ({ shapes = [], cur = null, editing = null, tool = 'select', dpr = 1, store = {}, edit = { value: '' }, log = [] } = {}) => {
   const tools = {};
   const get = new Function('$', 'shapes', 'commit', 'render', 'finishEdit', 'go', 'edit', 'localStorage', 'nextSize', 'cropping', 'stage',
-    `let gesture = false, cur = ${cur}, editing = ${editing}, tool = '${tool}', dpr = ${dpr}, remove; ${STYLE_SRC}
+    `let gesture = false, poly = null, endPoly = () => {}, cur = ${cur}, editing = ${editing}, tool = '${tool}', dpr = ${dpr}, remove; ${STYLE_SRC}
     ${SRC.match(/\$\('tools'\)\.onmousedown = .*/)[0]}; ${SRC.match(/\$\('tools'\)\.onclick = [\s\S]*?\n};/)[0]} ${SRC.match(/function stepStyle\([\s\S]*?\n\}/)[0]}
     return () => ({ cur, editing, styleOf });`)(
     () => tools, shapes, () => log.push('commit'), () => {}, () => log.push('finish'), () => log.push('go'), edit, store, nextSize, () => false, { dataset: {} });
@@ -119,13 +119,14 @@ const toolbar = ({ shapes = [], cur = null, editing = null, tool = 'select', dpr
 }
 // Delete/Backspace on the Format or Quality radios must not delete the selected shape.
 globalThis.document = { querySelector: () => null }; // no Save menu open
+globalThis.endPoly = () => {}; // no polygon being drawn, for the run() harnesses
 globalThis.isReload = (await import('./src/markup.js')).isReload; // editor.js imports it; the onkeydown harnesses below see it as a global
 // Ctrl+S while typing a label or cropping must reach Save (run handles the crop case), not be swallowed.
 {
   const src = (await import('node:fs')).readFileSync('./src/editor.js', 'utf8');
   const ran = [], edit = {};
   let prevented = 0, crop = false;
-  const k = new Function('run', 'finishEdit', 'cropping', 'marking', 'remove', 'edit', 'go', 'render', 'stage', `let gesture = false, cur = 0, tool = 'select', onkeydown; ${src.match(/onkeydown = e => \{[\s\S]*?\n\};/)[0]} return onkeydown;`)(
+  const k = new Function('run', 'finishEdit', 'cropping', 'marking', 'remove', 'edit', 'go', 'render', 'stage', `let gesture = false, poly = null, endPoly = () => {}, cur = 0, tool = 'select', onkeydown; ${src.match(/onkeydown = e => \{[\s\S]*?\n\};/)[0]} return onkeydown;`)(
     a => ran.push(a), () => {}, () => crop, () => true, () => {}, edit, () => {}, () => {}, { dataset: {} });
   k({ ctrlKey: true, key: 's', target: edit, preventDefault: () => prevented++ });
   crop = true;
@@ -135,7 +136,7 @@ globalThis.isReload = (await import('./src/markup.js')).isReload; // editor.js i
 {
   const src = (await import('node:fs')).readFileSync('./src/editor.js', 'utf8');
   let removed = 0;
-  const f = new Function('run', 'finishEdit', 'cropping', 'marking', 'remove', 'edit', 'go', 'render', 'stage', `let gesture = false, cur = 0, tool = 'select', onkeydown; ${src.match(/onkeydown = e => \{[\s\S]*?\n\};/)[0]} return onkeydown;`)(
+  const f = new Function('run', 'finishEdit', 'cropping', 'marking', 'remove', 'edit', 'go', 'render', 'stage', `let gesture = false, poly = null, endPoly = () => {}, cur = 0, tool = 'select', onkeydown; ${src.match(/onkeydown = e => \{[\s\S]*?\n\};/)[0]} return onkeydown;`)(
     () => {}, () => {}, () => false, () => true, () => { removed++; }, {}, () => {}, () => {}, { dataset: {} });
   f({ key: 'Delete', target: { tagName: 'INPUT' } });
   f({ key: 'Backspace', target: { tagName: 'INPUT' } });
@@ -144,7 +145,7 @@ globalThis.isReload = (await import('./src/markup.js')).isReload; // editor.js i
   assert.strictEqual(removed, 1);
   // Ctrl+P on a non-Latin layout (e.key 'з', e.code 'KeyP') must still be intercepted.
   const ran = [];
-  const g = new Function('run', 'finishEdit', 'cropping', 'marking', 'remove', 'edit', 'go', 'render', 'stage', `let gesture = false, cur = 0, tool = 'select', onkeydown; ${src.match(/onkeydown = e => \{[\s\S]*?\n\};/)[0]} return onkeydown;`)(
+  const g = new Function('run', 'finishEdit', 'cropping', 'marking', 'remove', 'edit', 'go', 'render', 'stage', `let gesture = false, poly = null, endPoly = () => {}, cur = 0, tool = 'select', onkeydown; ${src.match(/onkeydown = e => \{[\s\S]*?\n\};/)[0]} return onkeydown;`)(
     a => ran.push(a), () => {}, () => false, () => true, () => {}, {}, () => {}, () => {}, { dataset: {} });
   let prevented = 0;
   g({ ctrlKey: true, key: 'з', code: 'KeyP', target: { tagName: 'BODY' }, preventDefault: () => prevented++ });
@@ -152,7 +153,7 @@ globalThis.isReload = (await import('./src/markup.js')).isReload; // editor.js i
   g({ ctrlKey: true, key: 'l', code: 'KeyP', target: { tagName: 'BODY' }, preventDefault: () => prevented++ }); // Dvorak Ctrl+L
   assert.ok(prevented === 1 && ran.length === 1, 'Ctrl+L on Dvorak was taken for print');
   const steps = [];
-  const h = new Function('run', 'finishEdit', 'cropping', 'marking', 'remove', 'edit', 'go', 'render', 'stage', `let gesture = false, cur = 0, tool = 'select', onkeydown; ${src.match(/onkeydown = e => \{[\s\S]*?\n\};/)[0]} return onkeydown;`)(
+  const h = new Function('run', 'finishEdit', 'cropping', 'marking', 'remove', 'edit', 'go', 'render', 'stage', `let gesture = false, poly = null, endPoly = () => {}, cur = 0, tool = 'select', onkeydown; ${src.match(/onkeydown = e => \{[\s\S]*?\n\};/)[0]} return onkeydown;`)(
     () => {}, () => {}, () => false, () => false, () => {}, {}, d => steps.push(d), () => {}, { dataset: {} });
   h({ metaKey: true, key: 'z', target: { tagName: 'BODY' }, preventDefault: () => {} });
   h({ metaKey: true, shiftKey: true, key: 'z', target: { tagName: 'BODY' }, preventDefault: () => {} });
@@ -160,7 +161,7 @@ globalThis.isReload = (await import('./src/markup.js')).isReload; // editor.js i
   // Non-Latin layouts: Ctrl+Z/S and tool keys follow the physical key (Russian я = KeyZ, ы = KeyS, к = KeyR).
   globalThis.document = { querySelector: q => q === '[data-key="R"]' ? { click: () => steps.push('R') } : null };
   const ranRu = [];
-  const r = new Function('run', 'finishEdit', 'cropping', 'marking', 'remove', 'edit', 'go', 'render', 'stage', `let gesture = false, cur = 0, tool = 'select', onkeydown; ${src.match(/onkeydown = e => \{[\s\S]*?\n\};/)[0]} return onkeydown;`)(
+  const r = new Function('run', 'finishEdit', 'cropping', 'marking', 'remove', 'edit', 'go', 'render', 'stage', `let gesture = false, poly = null, endPoly = () => {}, cur = 0, tool = 'select', onkeydown; ${src.match(/onkeydown = e => \{[\s\S]*?\n\};/)[0]} return onkeydown;`)(
     a => ranRu.push(a), () => {}, () => false, () => false, () => {}, {}, d => steps.push(d), () => {}, { dataset: {} });
   r({ ctrlKey: true, key: 'я', code: 'KeyZ', target: { tagName: 'BODY' }, preventDefault: () => {} });
   r({ ctrlKey: true, key: 'ы', code: 'KeyS', target: { tagName: 'BODY' }, preventDefault: () => {} });
@@ -170,7 +171,7 @@ globalThis.isReload = (await import('./src/markup.js')).isReload; // editor.js i
   // Esc during IME composition belongs to the IME; it must not end the edit.
   let fin = 0;
   const edit = {};
-  const m = new Function('run', 'finishEdit', 'cropping', 'marking', 'remove', 'edit', 'go', 'render', 'stage', `let gesture = false, cur = 0, tool = 'select', onkeydown; ${src.match(/onkeydown = e => \{[\s\S]*?\n\};/)[0]} return onkeydown;`)(
+  const m = new Function('run', 'finishEdit', 'cropping', 'marking', 'remove', 'edit', 'go', 'render', 'stage', `let gesture = false, poly = null, endPoly = () => {}, cur = 0, tool = 'select', onkeydown; ${src.match(/onkeydown = e => \{[\s\S]*?\n\};/)[0]} return onkeydown;`)(
     () => {}, () => fin++, () => false, () => true, () => {}, edit, () => {}, () => {}, { dataset: {} });
   m({ key: 'Escape', isComposing: true, target: edit });
   assert.strictEqual(fin, 0, 'Esc during IME composition ended the edit');
@@ -179,7 +180,7 @@ globalThis.isReload = (await import('./src/markup.js')).isReload; // editor.js i
   // Esc with the Save menu open only closes the menu: it must not also end a crop or a text edit (editor-r1-5+editor-r2-2).
   globalThis.document = { querySelector: q => q === ':popover-open' ? {} : null };
   let ended = 0; globalThis.endCrop = () => ended++;
-  const p = new Function('run', 'finishEdit', 'cropping', 'marking', 'remove', 'edit', 'go', 'render', 'stage', `let gesture = false, cur = 0, tool = 'select', onkeydown; ${src.match(/onkeydown = e => \{[\s\S]*?\n\};/)[0]} return onkeydown;`);
+  const p = new Function('run', 'finishEdit', 'cropping', 'marking', 'remove', 'edit', 'go', 'render', 'stage', `let gesture = false, poly = null, endPoly = () => {}, cur = 0, tool = 'select', onkeydown; ${src.match(/onkeydown = e => \{[\s\S]*?\n\};/)[0]} return onkeydown;`);
   p(() => {}, () => {}, () => true, () => true, () => {}, edit, () => {}, () => {}, { dataset: {} })({ key: 'Escape', target: {} });
   p(() => {}, () => fin++, () => false, () => true, () => {}, edit, () => {}, () => {}, { dataset: {} })({ key: 'Escape', target: edit });
   assert.deepStrictEqual([ended, fin], [0, 1], 'Esc closing the Save menu also ended the crop / text edit');
@@ -189,7 +190,7 @@ globalThis.isReload = (await import('./src/markup.js')).isReload; // editor.js i
   const src = (await import('node:fs')).readFileSync('./src/editor.js', 'utf8'), edit = {};
   // editor-r2-5: a held Esc steps back to Select but its auto-repeat must not close the editor.
   let closed = 0; globalThis.closeEditor = () => closed++;
-  const held = new Function('run', 'finishEdit', 'cropping', 'marking', 'remove', 'edit', 'go', 'render', 'stage', `let gesture = false, cur = null, tool = 'rect', onkeydown; ${src.match(/onkeydown = e => \{[\s\S]*?\n\};/)[0]} return onkeydown;`)(
+  const held = new Function('run', 'finishEdit', 'cropping', 'marking', 'remove', 'edit', 'go', 'render', 'stage', `let gesture = false, poly = null, endPoly = () => {}, cur = null, tool = 'rect', onkeydown; ${src.match(/onkeydown = e => \{[\s\S]*?\n\};/)[0]} return onkeydown;`)(
     () => {}, () => {}, () => false, () => true, () => {}, edit, () => {}, () => {}, { dataset: {} });
   held({ key: 'Escape', target: {} }); held({ key: 'Escape', target: {}, repeat: true });
   assert.strictEqual(closed, 0, 'held Esc closed the editor');
@@ -238,7 +239,7 @@ globalThis.isReload = (await import('./src/markup.js')).isReload; // editor.js i
   const cls = new Set(), stage = { classList: { contains: c => cls.has(c), add: c => cls.add(c), remove: c => cls.delete(c) }, setPointerCapture() {} };
   const shot = { naturalWidth: 100, naturalHeight: 80 }, els = {}, $ = id => (els[id] ??= { style: {}, setAttribute() {} }), sel = $('sel');
   const t = new Function('$', 'stage', 'shot', 'sel', 'edit', 'document', 'URL', 'OffscreenCanvas', 'createImageBitmap', 'cropDown', 'markDown', 'applyZoom', 'show', 'report', 'render', 'finishEdit', 'place',
-    `let gesture = false, editing = null, swapping = false, png = 'orig', off = { x: 0, y: 0 }, shapes = [], hist = ['[[],null]'], step = 0, cur = null;
+    `let gesture = false, poly = null, endPoly = () => {}, editing = null, swapping = false, png = 'orig', off = { x: 0, y: 0 }, shapes = [], hist = ['[[],null]'], step = 0, cur = null;
     const cropping = () => stage.classList.contains('cropping');
     ${m(/let box, full, crop = .*/)}
     ${m(/const original = .*/)}
@@ -304,7 +305,7 @@ globalThis.isReload = (await import('./src/markup.js')).isReload; // editor.js i
 {
   const src = (await import('node:fs')).readFileSync('./src/editor.js', 'utf8');
   const shapes = [{ type: 'text', c: 'red', size: 20, text: 'abc' }], tools = {}, log = [], edit = { value: '' };
-  new Function('$', 'shapes', 'render', 'finishEdit', 'go', 'edit', `let gesture = false, cur = 0, editing = 0, tool = 'select', remove; const cropping = () => false;
+  new Function('$', 'shapes', 'render', 'finishEdit', 'go', 'edit', `let gesture = false, poly = null, endPoly = () => {}, cur = 0, editing = 0, tool = 'select', remove; const cropping = () => false;
     ${src.match(/\$\('tools'\)\.onclick = [\s\S]*?\n};/)[0]}`)(() => tools, shapes, () => {}, () => log.push('finish'), () => log.push('go'), edit);
   tools.onclick({ target: { closest: () => ({ dataset: { cmd: 'undo' } }) } });
   assert.deepStrictEqual(log, ['go'], 'Undo after clearing an existing text deleted it instead of undoing');
@@ -357,7 +358,7 @@ globalThis.isReload = (await import('./src/markup.js')).isReload; // editor.js i
   const src = (await import('node:fs')).readFileSync('./src/editor.js', 'utf8');
   const log = [], stage = { dataset: {} };
   const key = (cur, tool, marking = true) => new Function('run', 'finishEdit', 'cropping', 'marking', 'remove', 'edit', 'go', 'render', 'stage', 'closeEditor',
-    `let gesture = false, cur = ${cur}, tool = '${tool}', onkeydown; ${src.match(/onkeydown = e => \{[\s\S]*?\n\};/)[0]} return onkeydown;`)(
+    `let gesture = false, poly = null, endPoly = () => {}, cur = ${cur}, tool = '${tool}', onkeydown; ${src.match(/onkeydown = e => \{[\s\S]*?\n\};/)[0]} return onkeydown;`)(
     a => log.push(a), () => {}, () => false, () => marking, () => {}, {}, () => {}, () => log.push('render'), stage, () => log.push('close'))({ key: 'Escape', target: {} });
   key(0, 'select'); key('null', 'arrow');
   assert.deepStrictEqual(log, ['render', 'render'], 'Esc closed with a shape selected or a drawing tool picked');
@@ -423,7 +424,7 @@ globalThis.isReload = (await import('./src/markup.js')).isReload; // editor.js i
   const clicked = [];
   globalThis.document = { querySelector: q => q === ':popover-open' ? null : (clicked.push(q), { click() {} }) };
   const k = new Function('run', 'finishEdit', 'cropping', 'remove', 'edit', 'go', 'render', 'stage', 'closeEditor',
-    `let gesture = false, cur = null, tool = 'select', onkeydown; ${src.match(/onkeydown = e => \{[\s\S]*?\n\};/)[0]} return onkeydown;`)(
+    `let gesture = false, poly = null, endPoly = () => {}, cur = null, tool = 'select', onkeydown; ${src.match(/onkeydown = e => \{[\s\S]*?\n\};/)[0]} return onkeydown;`)(
     () => {}, () => {}, () => false, () => {}, {}, () => {}, () => {}, { dataset: {} }, () => {});
   for (const key of ['a', 'X', '"', ' ', '1']) k({ key, target: { tagName: 'BODY' } });
   k({ key: 'a', ctrlKey: true, target: { tagName: 'BODY' }, preventDefault() {} });
@@ -613,7 +614,7 @@ for (const a of JSON.parse((await import('node:fs')).readFileSync('./src-tauri/t
   const src = (await import('node:fs')).readFileSync('./src/editor.js', 'utf8');
   const sent = [];
   const [run, esc] = new Function('ACTIONS', 'png', '$', 'opts', 'finishEdit', 'state', 'cropping', 'invoke', 'editing', 'gesture',
-    `let busy = false, next = null; ${src.match(/let saved = .*/)[0]} ${src.match(/let kept = [\s\S]*?\n/)[0]} ${src.match(/const report = .*/)[0]}
+    `let busy = false, next = null, poly = null; ${src.match(/let saved = .*/)[0]} ${src.match(/let kept = [\s\S]*?\n/)[0]} ${src.match(/const report = .*/)[0]}
     ${src.match(/async function run\(key\) \{[\s\S]*?\n\}/)[0]} return [run, () => state() === saved];`)(
     { autocopy: async () => 'Copied as PNG', copy: async () => 'Copied as PNG' }, {}, () => ({}), { format: {} }, () => {},
     () => 'drawn', () => false, (c, a) => sent.push(a.d), null, false);
@@ -637,7 +638,7 @@ for (const a of JSON.parse((await import('node:fs')).readFileSync('./src-tauri/t
   const timers = [], clear = i => { if (timers[i - 1]) timers[i - 1].dead = true; };
   const shapes = [{ type: 'rect', c: 'red', w: 4 }], log = [], store = {}, btn = { dataset: { step: 'w', d: '1' } }, props = {};
   const [down, get] = new Function('$', 'shapes', 'render', 'commit', 'localStorage', 'nextSize', 'setTimeout', 'setInterval', 'clearTimeout', 'clearInterval',
-    `let gesture = false, cur = 0, editing = null, tool = 'select', dpr = 1; ${STYLE_SRC} ${SRC.match(/function stepStyle\([\s\S]*?\n\}/)[0]}
+    `let gesture = false, poly = null, endPoly = () => {}, cur = 0, editing = null, tool = 'select', dpr = 1; ${STYLE_SRC} ${SRC.match(/function stepStyle\([\s\S]*?\n\}/)[0]}
     ${SRC.match(/\$\('props'\)\.onpointerdown = [\s\S]*?\n\};/)[0]} return [$('props').onpointerdown, () => ({ w: shapes[0].w, st: styleOf('rect').w })];`)(
     () => props, shapes, () => {}, () => log.push('commit'), store, nextSize,
     (f, ms) => timers.push({ f, ms }), (f, ms) => timers.push({ f, ms, every: true }), clear, clear);
@@ -676,4 +677,44 @@ for (const a of JSON.parse((await import('node:fs')).readFileSync('./src-tauri/t
   const v = toolbar({ tool: 'pen' }); // no targets: swatches color the line whatever was picked
   v.click({ target: 'fill' }); v.click({ c: 'blue' });
   assert.strictEqual(v.get().styleOf('pen').c, 'blue');
+}
+// Polygon: clicks add points; a double-click, Enter or the first point closes; Backspace drops a point; Esc cancels; Shift snaps.
+{
+  const block = SRC.match(/let poly = null, polyAt = 0;[\s\S]*?\n\}\);/)[0];
+  const make = () => {
+    const shapes = [], log = [], stage = { addEventListener: (t, f) => { stage.move = f; } };
+    const api = new Function('shapes', 'stage', 'shot', 'snap', 'render', 'commit', 'localStorage', 'atInk',
+      `let cur = null, gesture = false, dpr = 1, tool = 'poly'; ${STYLE_SRC} ${block}
+      return { polyClick, endPoly, cancelPoly, dropPoint, get: () => ({ poly, cur }) };`)(
+      shapes, stage, { naturalWidth: 100, clientWidth: 100 }, snap, () => {}, () => log.push('commit'), {}, e => [e.x, e.y]);
+    return { shapes, log, stage, ...api, at: (x, y, t, o = {}) => api.polyClick({ x, y, timeStamp: t, ...o }) };
+  };
+  let p = make();
+  p.at(0, 0, 0); p.at(100, 0, 1000); p.at(100, 100, 2000);
+  p.stage.move({ x: 50, y: 150 });
+  assert.deepStrictEqual(p.shapes[0].pts.at(-1), [50, 150], 'the last point does not follow the pointer');
+  assert.match(toSvg(p.shapes, { x: 0, y: 0, w: 9, h: 9 }), /d="M0 0L100 0L100 100L50 150" fill="none"/, 'an open polygon is drawn unclosed, unfilled');
+  p.at(3, 2, 3000); // the first point closes it
+  assert.deepStrictEqual([p.shapes[0].pts, p.shapes[0].open, p.get(), p.log], [[[0, 0], [100, 0], [100, 100]], undefined, { poly: null, cur: 0 }, ['commit']]);
+  p.shapes[0].fill = true;
+  assert.match(toSvg(p.shapes, { x: 0, y: 0, w: 9, h: 9 }), /d="M0 0L100 0L100 100Z" fill="#e53935"/, 'closed polygon');
+  p = make(); // double-click closes without a doubled point
+  p.at(0, 0, 0); p.at(100, 0, 1000); p.at(100, 100, 2000); p.at(101, 100, 2200);
+  assert.strictEqual(p.shapes[0].pts.length, 3, 'double-click left a duplicate point');
+  p = make(); // Backspace drops the last point; Shift snaps; fewer than 3 points is nothing
+  p.at(0, 0, 0); p.at(100, 10, 1000, { shiftKey: true });
+  assert.deepStrictEqual(p.shapes[0].pts[1].map(Math.round), [100, 0], 'Shift did not snap the edge');
+  p.dropPoint();
+  assert.strictEqual(p.shapes[0].pts.length, 2);
+  p.endPoly();
+  assert.deepStrictEqual([p.shapes.length, p.log], [0, []], 'a 1-point polygon was kept');
+  p = make(); p.at(0, 0, 0); p.at(50, 50, 1000); p.cancelPoly();
+  assert.deepStrictEqual([p.shapes.length, p.get().poly], [0, null], 'Esc did not cancel');
+  // Keys while drawing: Esc cancels, Enter closes, Backspace drops a point (not the selected shape).
+  const done = [];
+  const k = new Function('run', 'finishEdit', 'cropping', 'remove', 'edit', 'go', 'render', 'stage', 'closeEditor', 'cancelPoly', 'endPoly', 'dropPoint',
+    `let gesture = false, poly = 0, cur = null, tool = 'poly', onkeydown; ${SRC.match(/onkeydown = e => \{[\s\S]*?\n\};/)[0]} return onkeydown;`)(
+    () => {}, () => {}, () => false, () => done.push('remove'), {}, () => {}, () => {}, { dataset: {} }, () => done.push('close'), () => done.push('cancel'), () => done.push('end'), () => done.push('drop'));
+  for (const key of ['Escape', 'Enter', 'Backspace']) k({ key, target: { tagName: 'BODY' }, preventDefault() {} });
+  assert.deepStrictEqual(done, ['cancel', 'end', 'drop']);
 }

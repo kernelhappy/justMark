@@ -87,3 +87,7 @@
   visible). The picker hides for tools with one color (highlighter, pen, line, arrow); the pick carries between
   tools that have it, else the tool's first target. A callout's box can be None (transparent). A text's background
   reaches 0.15 × size past the glyphs on each side.
+- **2026-10-13 — Polygon as built** (handsoff, spec silent): anything else while drawing (a tool, Undo/Redo/Delete,
+  Save/Copy/Print, Auto copy) closes the polygon first, as an open text is finished first; with fewer than 3 points
+  it is dropped. Undo while drawing therefore undoes the just-closed polygon (Redo brings it back). The first point
+  and the double-click both count within 8 screen px. Unsaved work includes a polygon being drawn.

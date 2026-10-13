@@ -101,7 +101,7 @@ let saved = '[[],null]';
 // whenever focus leaves (a new snip too), so it lets Esc close without asking but doesn't make the window disposable.
 // A text being typed or a stroke being drawn isn't in the history yet but counts.
 let kept = saved, reported = false;
-const report = () => { const d = editing != null || gesture || state() !== kept; if (d !== reported) invoke('dirty', { d: reported = d }); };
+const report = () => { const d = editing != null || gesture || poly != null || state() !== kept; if (d !== reported) invoke('dirty', { d: reported = d }); };
 // While set, focus loss is our own dialog's (or the window closing), not the user leaving: no Auto copy.
 let modal = false;
 const closeEditor = () => {
@@ -126,6 +126,7 @@ async function run(key) {
   // The pending crop box isn't in png yet: exporting now would ship the area being cut away (Ctrl+P lands here too).
   if (cropping()) { $('status').textContent = 'Apply or cancel the crop first'; return; }
   finishEdit(); // toolbar presses keep an open text focused, so its typed text isn't in shapes yet
+  endPoly(); // a polygon being drawn goes in as it stands
   if (busy) { if (key === 'copy') next = key; return; }
   busy = true;
   $('status').textContent = 'Working…';
@@ -305,13 +306,13 @@ function cropDown(e) {
 // Widths and text sizes are picked in screen pixels and stored in capture pixels: times dpr, which follows browser zoom and the monitor.
 let dpr = devicePixelRatio;
 // What the style dock offers per shape type or tool (see render).
-const KINDS = { select: '', hl: 'c w', pen: 'c w', line: 'c w', arrow: 'c w', rect: 'c w f', ellipse: 'c w f', cloud: 'c w f', text: 'c s', callout: 'c w s' };
+const KINDS = { select: '', hl: 'c w', pen: 'c w', line: 'c w', arrow: 'c w', rect: 'c w f', ellipse: 'c w f', cloud: 'c w f', poly: 'c w f', text: 'c s', callout: 'c w s' };
 let shapes = [], hist = ['[[],null]'], step = 0, off = { x: 0, y: 0 }, tool = 'select', cur = null, editing = null, lastDown = 0, gesture = false;
 // Each tool's style, in screen pixels, for its next shape. Kept in localStorage (shared by every editor window, like Save's
 // format), one key per tool so two windows restyling different tools don't overwrite each other.
 const RED = '#e53935', STYLES = {
   hl: { c: '#fdd835', w: 4 }, pen: { c: RED, w: 4 }, line: { c: RED, w: 4 }, arrow: { c: RED, w: 4 },
-  rect: { c: RED, w: 4, fill: false }, ellipse: { c: RED, w: 4, fill: false }, cloud: { c: RED, w: 4, fill: false },
+  rect: { c: RED, w: 4, fill: false }, ellipse: { c: RED, w: 4, fill: false }, cloud: { c: RED, w: 4, fill: false }, poly: { c: RED, w: 4, fill: false },
   text: { c: RED, size: 20, fc: null }, callout: { c: RED, w: 4, size: 20, fc: '#fff', tc: '#111' },
 };
 function styleOf(t) {
@@ -324,7 +325,7 @@ function setStyle(t, ch) {
 }
 // Color targets: the style key each of the picker's Line · Fill · Text sets, per shape type. The rest only have a line color.
 // fc: a fillable shape's fill color (missing: its line color), a text's background, a callout's box. tc: a callout's text.
-const TARGETS = { rect: { line: 'c', fill: 'fc' }, ellipse: { line: 'c', fill: 'fc' }, cloud: { line: 'c', fill: 'fc' }, text: { text: 'c', fill: 'fc' }, callout: { line: 'c', fill: 'fc', text: 'tc' } };
+const TARGETS = { rect: { line: 'c', fill: 'fc' }, ellipse: { line: 'c', fill: 'fc' }, cloud: { line: 'c', fill: 'fc' }, poly: { line: 'c', fill: 'fc' }, text: { text: 'c', fill: 'fc' }, callout: { line: 'c', fill: 'fc', text: 'tc' } };
 let colorTarget = 'line'; // the picker's pick
 // The picked target's key for a type; a type without that target gets its first.
 const keyOf = t => TARGETS[t]?.[colorTarget] ?? Object.values(TARGETS[t] ?? { line: 'c' })[0];
@@ -414,10 +415,11 @@ oncontextmenu = e => e.target === edit || e.preventDefault();
 $('tools').onmousedown = $('props').onmousedown = $('zoombar').onmousedown = $('savemenu').onmousedown = $('status').onmousedown = e => e.preventDefault();
 $('tools').onclick = $('props').onclick = ({ target, detail }) => {
   if (gesture) return;
-  const d = target.closest('button')?.dataset ?? {}, s = shapes[cur];
+  // A polygon being drawn is styled like a selected shape, but isn't committed until it closes.
+  const d = target.closest('button')?.dataset ?? {}, i = cur ?? poly, s = shapes[i];
   // Weight and text size −/+ step on press (see onpointerdown below); a click from the keyboard (detail 0) is one step.
   if (d.step) {
-    if (!detail) { stepStyle(d.step, +d.d); if (editing == null) commit(); }
+    if (!detail) { stepStyle(d.step, +d.d); if (editing == null && poly == null) commit(); }
     return;
   }
   // Tool, Undo, Redo and Delete end an open edit first; on an empty new text that just cancels it, so Undo doesn't also undo the last commit.
@@ -430,6 +432,7 @@ $('tools').onclick = $('props').onclick = ({ target, detail }) => {
       if (empty && d.cmd) return render();
     }
   }
+  if (d.tool || d.cmd) endPoly();
   if (d.tool) {
     if (cropping()) endCrop();
     tool = stage.dataset.tool = d.tool;
@@ -443,17 +446,17 @@ $('tools').onclick = $('props').onclick = ({ target, detail }) => {
     if (!ch) return;
     setStyle(t, ch);
     if (s) {
-      shapes[cur] = { ...s, ...ch };
-      return editing == null ? commit() : render(); // an open edit commits its style with its text
+      shapes[i] = { ...s, ...ch };
+      return editing == null && poly == null ? commit() : render(); // an open edit commits its style with its text
     }
   }
   render();
 };
 // One step of weight (1–16 screen px) or text size (the size list) for the selected shape and its tool, or the tool.
 function stepStyle(k, d) {
-  const s = shapes[cur], now = styleNow(s), v = k === 'w' ? Math.min(16, Math.max(1, Math.round(now.w) + d)) : nextSize(now.size, d);
+  const i = cur ?? poly, s = shapes[i], now = styleNow(s), v = k === 'w' ? Math.min(16, Math.max(1, Math.round(now.w) + d)) : nextSize(now.size, d);
   setStyle(s?.type ?? tool, { [k]: v });
-  if (s && k in s) shapes[cur] = { ...s, [k]: v * dpr };
+  if (s && k in s) shapes[i] = { ...s, [k]: v * dpr };
   render();
 }
 // Holding − or + repeats: one step, then after 400 ms ~12 steps/s until release or the pointer leaves.
@@ -468,7 +471,7 @@ $('props').onpointerdown = e => {
     clearTimeout(t);
     clearInterval(t);
     b.onpointerup = b.onpointerleave = b.onpointercancel = null;
-    if (editing == null) commit();
+    if (editing == null && poly == null) commit();
   };
 };
 
@@ -512,11 +515,67 @@ function newShape(p) {
   return { type: tool, c, w, dpr, fill: st.fill, fc: st.fc, l: p[0], t: p[1], r: p[0], b: p[1] };
 }
 const atInk = ev => { const [x, y] = at(ev); return [x + off.x, y + off.y]; };
+
+// Polygon: a click adds a point; a double-click, Enter or a click on the first point closes it; Backspace drops the last
+// point; Esc cancels. Shift snaps the next edge to 45°. While drawing, poly is its index and its last point follows the
+// pointer; it goes into the history when it closes. Anything else (a tool, Undo, Save...) closes it first.
+let poly = null, polyAt = 0;
+function polyClick(e) {
+  const p = atInk(e), k = shot.naturalWidth / shot.clientWidth, near = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]) < 8 * k;
+  if (poly == null) {
+    const st = styleOf('poly');
+    cur = null;
+    poly = shapes.push({ type: 'poly', c: st.c, w: st.w * dpr, dpr, fill: st.fill, fc: st.fc, pts: [p, p], open: true }) - 1;
+  } else {
+    const s = shapes[poly], pts = s.pts.slice(0, -1), q = e.shiftKey ? snap(pts.at(-1), p) : p;
+    // The second press of a double-click lands on the point the first one added.
+    if ((e.timeStamp - polyAt < 500 && near(q, pts.at(-1))) || (pts.length >= 3 && near(p, pts[0]))) return endPoly();
+    s.pts = [...pts, q, q];
+  }
+  polyAt = e.timeStamp;
+  render();
+}
+// Closes the polygon being drawn; with fewer than 3 points there is nothing to keep.
+function endPoly() {
+  if (poly == null) return;
+  const i = poly, { open, ...s } = shapes[i], pts = s.pts.slice(0, -1);
+  poly = null;
+  if (pts.length < 3) {
+    shapes.splice(i, 1);
+    return render();
+  }
+  shapes[i] = { ...s, pts };
+  cur = i;
+  commit();
+}
+function cancelPoly() {
+  if (poly == null) return;
+  shapes.splice(poly, 1);
+  poly = null;
+  render();
+}
+// Backspace: the last point goes; the pointer's point stays.
+function dropPoint() {
+  const s = shapes[poly];
+  if (s.pts.length <= 2) return cancelPoly();
+  s.pts.splice(-2, 1);
+  render();
+}
+stage.addEventListener('pointermove', e => {
+  if (poly == null || gesture) return;
+  const s = shapes[poly], p = atInk(e);
+  s.pts[s.pts.length - 1] = e.shiftKey ? snap(s.pts.at(-2), p) : p;
+  render();
+});
 // A handle of the selected shape resizes it; otherwise Select picks and moves, Text places or edits on release, and the rest draw.
 function markDown(e) {
   const p0 = atInk(e), h = e.target.closest('#pick') && e.target.dataset.h, hit = e.target.closest('#ink [data-i]'), hi = hit && +hit.dataset.i;
   const k = shot.naturalWidth / shot.clientWidth; // capture px per screen px, so drag thresholds don't change with zoom
   let i = cur, upd;
+  if (tool === 'poly' && (poly != null || !h)) {
+    stage.onpointermove = stage.onpointerup = null;
+    return polyClick(e);
+  }
   if (h) {
     const from = shapes[i];
     upd = (ev, dx, dy) => {
@@ -630,6 +689,10 @@ onkeydown = e => {
   if (e.target === edit) {
     if (e.key === 'Escape' && !e.isComposing) finishEdit();
     return;
+  }
+  if (poly != null && ['Escape', 'Enter', 'Backspace'].includes(e.key)) {
+    e.preventDefault?.();
+    return e.key === 'Escape' ? cancelPoly() : e.key === 'Enter' ? endPoly() : dropPoint();
   }
   if ((e.ctrlKey || e.metaKey) && (k === 'z' || k === 'y')) {
     e.preventDefault();
