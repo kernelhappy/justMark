@@ -357,4 +357,16 @@ globalThis.document = { querySelector: () => null }; // no Save menu open
   await first; await second;
   assert.deepStrictEqual(copied, ['no box', 'box'], 'second Copy during an encode is dropped');
 }
+// JPG/PDF have no alpha: a transparent PNG (Open with) must be flattened onto white, not black (bughunt export-r1-3).
+{
+  const src = (await import('node:fs')).readFileSync('./src/editor.js', 'utf8').match(/async function encode[\s\S]*?\n}\n/)[0];
+  for (const fmt of ['jpg', 'pdf']) {
+    const log = [], ctx = { set fillStyle(v) { log.push('fill ' + v); }, fillRect: () => log.push('rect'), drawImage: () => log.push('img') };
+    class OffscreenCanvas { constructor(w, h) { Object.assign(this, { width: w, height: h }); } getContext() { return ctx; } convertToBlob() { return {}; } }
+    const encode = new Function('png', 'off', 'shapes', 'opts', 'createImageBitmap', 'OffscreenCanvas', 'canvasToPdf', `${src} return encode;`)(
+      {}, {}, [], { quality: { value: '0.9' } }, async () => ({ width: 2, height: 2 }), OffscreenCanvas, () => ({}));
+    await encode(fmt);
+    assert.deepStrictEqual(log, ['fill #fff', 'rect', 'img'], fmt + ': transparent areas not flattened onto white');
+  }
+}
 console.log('ok');

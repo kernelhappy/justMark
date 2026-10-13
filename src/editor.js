@@ -42,6 +42,8 @@ async function encode(fmt) {
   if (fmt === 'png' && !sh.length) return png0;
   const quality = +opts.quality.value;
   const img = await createImageBitmap(png0), c = new OffscreenCanvas(img.width, img.height), ctx = c.getContext('2d', { willReadFrequently: true });
+  // JPG and PDF (JPEG pages) have no alpha: flatten a transparent PNG onto white, or its clear areas encode as black.
+  if (fmt !== 'png') { ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, img.width, img.height); }
   ctx.drawImage(img, 0, 0);
   if (sh.length) {
     const ink = new Image(), url = URL.createObjectURL(new Blob([toSvg(sh, { ...o, w: img.width, h: img.height }, 0, dpr)], { type: 'image/svg+xml' }));
