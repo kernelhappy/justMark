@@ -20,6 +20,23 @@ data.fill(0, (2 * W + 5) * 4, (2 * W + 6) * 4);
 for (let r = 3; r < 5; r++) for (let x = 0; x < W; x += 2) data.fill(0, (r * W + x) * 4, (r * W + x + 1) * 4);
 assert.strictEqual(quietRow(data, W, 5), 1);
 assert.strictEqual(quietRow(data.subarray(2 * W * 4), W, 3), 0); // no blank row -> least busy row
+// canvasToPdf on very narrow images: no 0-tall getImageData, and no page taller than the 720pt content area.
+{
+  const { canvasToPdf } = await import('./src/pdf.js');
+  const prev = globalThis.OffscreenCanvas;
+  globalThis.OffscreenCanvas = class { constructor(w, h) { Object.assign(this, { width: w, height: h }); }
+    getContext() { return { drawImage() {} }; } async convertToBlob() { return new Blob([JPG]); } };
+  for (const w of [1, 2, 5, 8, 11]) for (const h of [40, Math.round(w * 4 / 3)]) { // 40: many pages; w*4/3: one full old-size page
+    const canvas = { width: w, height: h, getContext: () => ({ getImageData(x, y, cw, ch) {
+      if (!cw || !ch) throw new RangeError('IndexSizeError: source height is 0');
+      return { data: new Uint8ClampedArray(cw * ch * 4).fill(255) };
+    } }) };
+    const out = Buffer.from(await (await canvasToPdf(canvas)).arrayBuffer()).toString('latin1');
+    for (const m of out.matchAll(/q [\d.]+ 0 0 ([\d.]+) [\d.]+ (-?[\d.]+) cm/g))
+      assert(+m[1] <= 720 && +m[2] >= 36, `w=${w}: page image ${m[1]}pt tall at y=${m[2]}`);
+  }
+  globalThis.OffscreenCanvas = prev;
+}
 // Markup geometry and serialization.
 const { dragEdges, bounds, move, resize, toSvg, snap, nextSize } = await import('./src/markup.js');
 assert.deepStrictEqual(snap([0, 0], [10, 2]).map(Math.round), [10, 0]); // near-horizontal -> horizontal
