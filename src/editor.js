@@ -215,6 +215,8 @@ async function applyCrop() {
     original ??= src;
     off = { x: o.x + x, y: o.y + y, w, h }; // w, h: only so state() sees a crop that keeps the top-left corner
     setShot(blob);
+  } catch (e) {
+    $('status').textContent = 'Crop failed: ' + (e.message ?? e);
   } finally {
     if (png === src) swapping = false; // failed: no new image is coming
   }

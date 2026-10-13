@@ -462,3 +462,12 @@ for (const a of JSON.parse((await import('node:fs')).readFileSync('./src-tauri/t
   stage.onpointermove({ x: 20, y: 10 });
   assert.strictEqual(shapes[0].l, 10, 'a real drag should move it');
 }
+// A failed crop encode must say so in the status bar, not just end crop mode silently (bughunt editor-r1-9).
+{
+  const src = (await import('node:fs')).readFileSync('./src/editor.js', 'utf8').match(/async function applyCrop[\s\S]*?\n}\n/)[0];
+  const status = { textContent: '' }, png = {};
+  const applyCrop = new Function('$', 'png', 'box', 'off', 'endCrop', 'createImageBitmap', 'OffscreenCanvas', 'setShot', 'original', 'swapping',
+    `${src} return applyCrop;`)(() => status, png, { l: 0, t: 0, r: 5, b: 5 }, { x: 0, y: 0 }, () => {}, async () => { throw new Error('oom'); }, class {}, () => {}, null, false);
+  await applyCrop();
+  assert.match(status.textContent, /oom/, 'crop failure was silent');
+}
