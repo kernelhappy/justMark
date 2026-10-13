@@ -44,6 +44,25 @@ fn wait_complete(p: &Path) {
     }
 }
 
+/// Blocking work (a modal dialog, waiting on a file) runs on the blocking pool: the async runtime has about one
+/// worker per core, and with them all blocked a new window's `shot` never runs and it stays hidden.
+async fn blocking<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> Result<T, String> {
+    tauri::async_runtime::spawn_blocking(f).await.map_err(|e| e.to_string())
+}
+
+#[test]
+fn blocking_work_leaves_the_async_runtime_free() {
+    use tauri::async_runtime::spawn;
+    let n = std::thread::available_parallelism().map_or(4, |n| n.get()) + 1;
+    for _ in 0..n {
+        spawn(blocking(|| sleep(Duration::from_secs(3))));
+    }
+    sleep(Duration::from_millis(100));
+    let (tx, rx) = std::sync::mpsc::channel();
+    spawn(async move { tx.send(()) });
+    assert!(rx.recv_timeout(Duration::from_secs(1)).is_ok(), "runtime starved by {n} blocking calls");
+}
+
 /// One hidden window per image; the page shows it once the image is laid out (see `ready`).
 fn open(app: &AppHandle, path: PathBuf, t0: Instant, from_watcher: bool) {
     static N: AtomicUsize = AtomicUsize::new(0);
@@ -65,11 +84,11 @@ fn open(app: &AppHandle, path: PathBuf, t0: Instant, from_watcher: bool) {
     }
 }
 
-/// Off the main thread (async): it can wait for the file, which the window started loading alongside.
-#[tauri::command(async)]
-fn shot(w: WebviewWindow, shots: State<Shots>) -> Result<Response, String> {
+/// Off the main thread (see `blocking`): it can wait for the file, which the window started loading alongside.
+#[tauri::command]
+async fn shot(w: WebviewWindow, shots: State<'_, Shots>) -> Result<Response, String> {
     let (path, from_watcher) = shots.0.lock().unwrap().get(w.label()).map(|s| (s.0.clone(), s.2)).ok_or("no image for this window")?;
-    load(&path, from_watcher).map(Response::new).map_err(|e| e.to_string())
+    blocking(move || load(&path, from_watcher)).await?.map(Response::new).map_err(|e| e.to_string())
 }
 
 /// Files from argv are already complete, and may not end in IEND/FFD9 (e.g. a Motion Photo): only wait for the watcher's.
@@ -94,8 +113,8 @@ fn opened_files_are_read_without_waiting_for_an_end_marker() {
 /// Save: the Windows Save dialog, then the page's encoded bytes (the request body) go to the picked file.
 /// Not showSaveFilePicker: WebView2 titles its dialog "Warning: this site can see edits you make", and once never showed it.
 /// Returns the saved file's name, or None when the dialog was cancelled.
-#[tauri::command(async)]
-fn save(w: WebviewWindow, shots: State<Shots>, req: Request) -> Result<Option<String>, String> {
+#[tauri::command]
+async fn save(w: WebviewWindow, shots: State<'_, Shots>, req: Request<'_>) -> Result<Option<String>, String> {
     let InvokeBody::Raw(bytes) = req.body() else { return Err("no image data".into()) };
     let ext = req.headers().get("ext").and_then(|v| v.to_str().ok()).unwrap_or_default();
     let kind = match ext {
@@ -105,11 +124,9 @@ fn save(w: WebviewWindow, shots: State<Shots>, req: Request) -> Result<Option<St
         _ => return Err(format!("can't save as {ext:?}")),
     };
     let stem = shots.0.lock().unwrap().get(w.label()).and_then(|s| s.0.file_stem().map(|n| n.to_string_lossy().into_owned()));
-    let Some(path) = rfd::FileDialog::new()
-        .set_parent(&w)
-        .set_file_name(format!("{}.{ext}", stem.unwrap_or_else(|| "snarkymark".into())))
-        .add_filter(kind, &[ext])
-        .save_file()
+    let file_name = format!("{}.{ext}", stem.unwrap_or_else(|| "snarkymark".into()));
+    let ext = ext.to_owned();
+    let Some(path) = blocking(move || rfd::FileDialog::new().set_parent(&w).set_file_name(file_name).add_filter(kind, &[ext]).save_file()).await?
     else {
         return Ok(None);
     };
