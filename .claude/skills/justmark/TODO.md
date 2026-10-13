@@ -1,9 +1,11 @@
 # TODO
 
-- [ ] Rename snarkymark → JustMark (product name, identifier, tray tooltip, skill/memory names, repo) once
-      Settings merges. A new identifier moves the config dir and WebView2 data (settings, localStorage reset).
+- [x] Rename snarkymark → JustMark in the app and skill (2026-10-13). A new identifier moves the config dir and
+      WebView2 data (settings, localStorage reset once).
+- [ ] User: rename the local repo folder, the GitHub repo and the Claude memory dir (left alone: renaming them
+      breaks paths). The old `%APPDATA%\io.github.snarkymark` and `%LOCALAPPDATA%\io.github.snarkymark` can go.
 - [ ] User: turn off Snipping Tool notifications (Settings → System → Notifications) so its toast doesn't
-      compete with snarkymark; keep "Automatically save screenshots" on.
+      compete with JustMark; keep "Automatically save screenshots" on.
 - [ ] Verify "Start at login" (now in the Settings window) by hand (not exercised in automation, to avoid
       writing HKCU Run).
 - [ ] Settings hotkey recorder can't record the combination that is registered now (Windows delivers it as the

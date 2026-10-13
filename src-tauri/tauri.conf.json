@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "snarkymark",
+  "productName": "JustMark",
   "version": "0.1.0",
-  "identifier": "io.github.snarkymark",
+  "identifier": "io.github.justmark",
   "build": { "frontendDist": "../src" },
   "app": {
     "withGlobalTauri": true,
@@ -13,6 +13,6 @@
     "active": true,
     "targets": ["nsis"],
     "icon": ["icons/icon.ico"],
-    "fileAssociations": [{ "ext": ["png", "jpg", "jpeg"], "name": "snarkymark.Image", "role": "Editor" }]
+    "fileAssociations": [{ "ext": ["png", "jpg", "jpeg"], "name": "JustMark.Image", "role": "Editor" }]
   }
 }

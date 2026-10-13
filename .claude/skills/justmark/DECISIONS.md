@@ -74,3 +74,7 @@
   - Right-click verb labelled just "JustMark"; app-managed HKCU toggle because dev runs the bare exe.
     Windows 11 top-level menu needs IExplorerCommand + a signed sparse package: deferred to installer/signing.
 - **2026-10-13 — Rename to JustMark** (user), to show its relation to JustSave. After Settings merges.
+- **2026-10-13 — Rename as built** (handsoff, spec silent on these): identifier `io.github.justmark`; Cargo
+  package `justmark`, so the exe is `justmark.exe` (Cargo's lowercase convention; Windows ignores case);
+  file-association ProgID `JustMark.Image`; Start at login's Run value is named `JustMark`. Nothing migrates the old
+  config dir or an old `snarkymark` Run value (none existed on the dev box).

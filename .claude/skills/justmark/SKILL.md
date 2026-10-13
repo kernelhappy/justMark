@@ -1,12 +1,12 @@
 ---
-name: snarkymark
-description: Spec for snarkymark, a lightweight Windows screenshot markup editor (Tauri 2 tray app + JustSave's vanilla-JS SVG editor). Load before changing how snips get in, window/tray lifecycle, the editor port, Save/Copy/Print, or anything that affects startup time or idle memory.
+name: justmark
+description: Spec for JustMark (formerly snarkymark), a lightweight Windows screenshot markup editor (Tauri 2 tray app + JustSave's vanilla-JS SVG editor). Load before changing how snips get in, window/tray lifecycle, the editor port, Save/Copy/Print, or anything that affects startup time or idle memory.
 ---
 
-# snarkymark — spec
+# JustMark — spec
 
 Replaces the Windows Snipping Tool's **editor**, not its capture. Win+Shift+S / PrtScn keep taking the
-screenshot; snarkymark opens every snip for markup. Lightness is the point: measure startup and idle RAM
+screenshot; JustMark opens every snip for markup. Lightness is the point: measure startup and idle RAM
 when changing anything structural (see Budgets).
 
 ## Behavior
@@ -34,7 +34,7 @@ when changing anything structural (see Budgets).
 A **Settings…** tray item opens a small settings window (`settings.html`; a WebView2 window like the
 editor: ~100 MB only while open, nothing idle; one at a time, Esc closes it, not an editor so it never
 counts toward Max windows). Every change applies at once, no Save button. Settings live in
-`settings.json` in the app config dir (`%APPDATA%\io.github.snarkymark`), read by Rust (the
+`settings.json` in the app config dir (`%APPDATA%\io.github.justmark`), read by Rust (the
 window-opening rules apply before any page exists); a missing file or field means the default.
 
 | Setting | Default | Behavior |
@@ -79,7 +79,7 @@ smaller image encoded first), Rust writes nothing and the markup stays unsaved: 
 - **Editor = JustSave's** (`markup.js`, `pdf.js` unchanged; `editor.js`/`index.html` from
   `result.js`/`result.html` at JustSave `5cece1b`). Shapes: highlighter, pen, line, arrow, rect, ellipse,
   cloud, text, callout; filled box redacts (burned in on every export); crop; zoom; Save (PNG/JPG/PDF),
-  Copy (PNG, `navigator.clipboard.write`), Print (`print()` of the burned-in PNG). snarkymark-only
+  Copy (PNG, `navigator.clipboard.write`), Print (`print()` of the burned-in PNG). JustMark-only
   changes: capture comes from `invoke('shot')` (JPEG normalized to PNG at load), always in markup
   (JustSave's Markup toggle is gone), Ctrl+S/Ctrl+C, Esc-to-close, no browser context menu (except in
   the text editor), and the UI below.
@@ -94,7 +94,7 @@ smaller image encoded first), Rust writes nothing and the markup stays unsaved: 
   - *Status* is a toast above the dock; Saved/Copied fade after 2.5 s, errors stay until clicked.
   - Theme: system light/dark via `light-dark()` tokens on `:root`; violet accent so UI state never looks
     like ink (no swatch is violet). Tooltips are CSS (`aria-label` + `data-tip`), not `title`.
-- **Tests**: `node test.mjs` (markup/pdf/editor tests carried from JustSave + snarkymark's); `cargo test`
+- **Tests**: `node test.mjs` (markup/pdf/editor tests carried from JustSave + JustMark's); `cargo test`
   in `src-tauri` (end-marker wait).
 
 ## Budgets (measured 2026-10-12, release build, Win 11, WebView2 154)

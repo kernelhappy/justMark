@@ -309,7 +309,7 @@ fn load(p: &Path, from_watcher: bool) -> std::io::Result<Vec<u8>> {
 #[test]
 fn opened_files_are_read_without_waiting_for_an_end_marker() {
     // A Motion Photo: a complete JPEG with an MP4 after its FFD9.
-    let p = std::env::temp_dir().join("snarkymark-trailer-test.jpg");
+    let p = std::env::temp_dir().join("justmark-trailer-test.jpg");
     std::fs::write(&p, b"\xFF\xD8jpeg\xFF\xD9ftypmp4 trailer").unwrap();
     let t = Instant::now();
     load(&p, false).unwrap();
@@ -331,7 +331,7 @@ async fn save(w: WebviewWindow, shots: State<'_, Shots>, req: Request<'_>) -> Re
         _ => return Err(format!("can't save as {ext:?}")),
     };
     let stem = shots.0.lock().unwrap().get(w.label()).and_then(|s| s.path.file_stem().map(|n| n.to_string_lossy().into_owned()));
-    let file_name = format!("{}.{ext}", stem.unwrap_or_else(|| "snarkymark".into()));
+    let file_name = format!("{}.{ext}", stem.unwrap_or_else(|| "JustMark".into()));
     let filter = ext.to_owned();
     let Some(path) = blocking(move || rfd::FileDialog::new().set_parent(&w).set_file_name(file_name).add_filter(kind, &[filter]).save_file()).await?
     else {
@@ -442,7 +442,7 @@ fn screenshots_dir(known: Option<PathBuf>, pictures: Option<PathBuf>) -> Option<
 
 #[test]
 fn wait_complete_waits_for_the_end_marker() {
-    let p = std::env::temp_dir().join("snarkymark-wait-test.png");
+    let p = std::env::temp_dir().join("justmark-wait-test.png");
     std::fs::write(&p, b"\x89PNG partial\xFF\xD9").unwrap(); // IDAT bytes can end in the JPEG marker
     let (p2, t) = (p.clone(), Instant::now());
     let writer = std::thread::spawn(move || {
@@ -517,7 +517,7 @@ fn watch_images(
 
 #[test]
 fn watch_follows_the_folder_when_it_moves() {
-    let base = std::env::temp_dir().join("snarkymark-move-test");
+    let base = std::env::temp_dir().join("justmark-move-test");
     let _ = std::fs::remove_dir_all(&base);
     let (a, b) = (base.join("pics").join("a"), base.join("b"));
     std::fs::create_dir_all(&a).unwrap();
@@ -567,7 +567,7 @@ fn login_click_flips_real_state() {
 /// can't clear it), and the exe path quoted so a space in it can't be split at login.
 fn login_launcher(exe: &Path) -> auto_launch::AutoLaunch {
     auto_launch::AutoLaunchBuilder::new()
-        .set_app_name("snarkymark")
+        .set_app_name("JustMark")
         .set_app_path(&format!("\"{}\"", exe.display()))
         .set_windows_enable_mode(auto_launch::WindowsEnableMode::CurrentUser)
         .build()
@@ -576,8 +576,8 @@ fn login_launcher(exe: &Path) -> auto_launch::AutoLaunch {
 
 #[test]
 fn login_entry_quotes_exe_path() {
-    let a = login_launcher(Path::new(r"C:\Users\John Smith\snarkymark.exe"));
-    assert_eq!(a.get_app_path(), r#""C:\Users\John Smith\snarkymark.exe""#);
+    let a = login_launcher(Path::new(r"C:\Users\John Smith\justmark.exe"));
+    assert_eq!(a.get_app_path(), r#""C:\Users\John Smith\justmark.exe""#);
 }
 
 /// The Settings window's values (Start at login is the HKCU entry itself, not stored here).
@@ -630,7 +630,7 @@ fn latest(dir: &Path) -> Option<PathBuf> {
 
 #[test]
 fn latest_is_the_newest_image() {
-    let d = std::env::temp_dir().join("snarkymark-latest-test");
+    let d = std::env::temp_dir().join("justmark-latest-test");
     let _ = std::fs::remove_dir_all(&d);
     std::fs::create_dir_all(&d).unwrap();
     for f in ["a.png", "b.jpg", "c.txt", "a.png"] {
@@ -667,7 +667,7 @@ fn open_settings(app: &AppHandle) {
         return;
     }
     let built = WebviewWindowBuilder::new(app, "settings", WebviewUrl::App("settings.html".into()))
-        .title("snarkymark settings")
+        .title("JustMark settings")
         .inner_size(440.0, 340.0)
         .resizable(false)
         .maximizable(false)
@@ -768,10 +768,10 @@ fn main() {
             }
             app.manage(a);
             let settings = MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
-            let quit = MenuItem::with_id(app, "quit", "Quit snarkymark", true, None::<&str>)?;
+            let quit = MenuItem::with_id(app, "quit", "Quit JustMark", true, None::<&str>)?;
             TrayIconBuilder::new()
                 .icon(app.default_window_icon().unwrap().clone())
-                .tooltip("snarkymark")
+                .tooltip("JustMark")
                 .menu(&Menu::with_items(app, &[&settings, &quit])?)
                 .on_menu_event(|app, e| match e.id().as_ref() {
                     "quit" => app.exit(0),
@@ -793,7 +793,7 @@ fn main() {
             Ok(())
         })
         .build(tauri::generate_context!())
-        .expect("error while building snarkymark");
+        .expect("error while building JustMark");
     // Closing the last editor window leaves the tray running; only Quit exits.
     app.run(|_, e| {
         if let RunEvent::ExitRequested { api, code: None, .. } = e {
@@ -804,7 +804,7 @@ fn main() {
 
 #[test]
 fn screenshots_dir_is_created_when_missing() {
-    let pics = std::env::temp_dir().join("snarkymark-pictures-test");
+    let pics = std::env::temp_dir().join("justmark-pictures-test");
     let _ = std::fs::remove_dir_all(&pics);
     let dir = screenshots_dir(None, Some(pics.clone())).unwrap();
     assert!(dir == pics.join("Screenshots") && dir.is_dir());
