@@ -335,8 +335,12 @@ $('tools').onclick = $('props').onclick = ({ target }) => {
   // Tool, Undo, Redo and Delete end an open edit first; on an empty new text that just cancels it, so Undo doesn't also undo the last commit.
   if (editing != null && (d.tool || d.cmd)) {
     const empty = !edit.value.trimEnd();
-    finishEdit();
-    if (empty && d.cmd) return render();
+    // An existing text cleared to empty: drop the edit uncommitted, so the command acts on the saved history.
+    if (empty && d.cmd && shapes[editing].text) { editing = null; edit.hidden = true; }
+    else {
+      finishEdit();
+      if (empty && d.cmd) return render();
+    }
   }
   if (d.tool) {
     if (cropping()) endCrop();

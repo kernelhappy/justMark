@@ -253,6 +253,16 @@ globalThis.isReload = (await import('./src/markup.js')).isReload; // editor.js i
   tools.onclick({ target: { closest: () => ({ dataset: { cmd: 'undo' } }) } });
   assert.ok(!log.includes('go'), 'Undo on an empty new text also undid the previous commit');
 }
+// editor-r2-4: clearing an existing text then Undo must undo, not delete the shape as a new step.
+{
+  const src = (await import('node:fs')).readFileSync('./src/editor.js', 'utf8');
+  const shapes = [{ type: 'text', c: 'red', size: 20, text: 'abc' }], tools = {}, log = [], edit = { value: '' };
+  new Function('$', 'shapes', 'render', 'finishEdit', 'go', 'edit', `let gesture = false, cur = 0, editing = 0, tool = 'select', remove;
+    ${src.match(/\$\('tools'\)\.onclick = [\s\S]*?\n};/)[0]}`)(() => tools, shapes, () => {}, () => log.push('finish'), () => log.push('go'), edit);
+  tools.onclick({ target: { closest: () => ({ dataset: { cmd: 'undo' } }) } });
+  assert.deepStrictEqual(log, ['go'], 'Undo after clearing an existing text deleted it instead of undoing');
+  assert.ok(edit.hidden, 'editor left open');
+}
 // Print: if print() returns without firing afterprint (policy-blocked, throttled), .burned must not linger for menu Print.
 {
   const src = (await import('node:fs')).readFileSync('./src/editor.js', 'utf8');
