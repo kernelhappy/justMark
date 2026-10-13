@@ -72,3 +72,17 @@ function bin(buf) {
   for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000));
   return s;
 }
+
+// CF_DIB for the clipboard (Auto copy, see clip in main.rs): a 32-bit BITMAPINFOHEADER, then BGRA rows bottom-up,
+// from canvas RGBA. Beside the PNG, as Chrome's own Copy writes, for apps that don't take PNG.
+export function toDib(rgba, w, h) {
+  const out = new Uint8Array(40 + w * h * 4), v = new DataView(out.buffer);
+  v.setUint32(0, 40, true); v.setInt32(4, w, true); v.setInt32(8, h, true); v.setUint16(12, 1, true); v.setUint16(14, 32, true);
+  for (let y = 0; y < h; y++) {
+    const src = (h - 1 - y) * w * 4, dst = 40 + y * w * 4;
+    for (let x = 0; x < w * 4; x += 4) {
+      out[dst + x] = rgba[src + x + 2]; out[dst + x + 1] = rgba[src + x + 1]; out[dst + x + 2] = rgba[src + x]; out[dst + x + 3] = rgba[src + x + 3];
+    }
+  }
+  return out;
+}

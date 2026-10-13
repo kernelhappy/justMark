@@ -229,13 +229,13 @@ globalThis.isReload = (await import('./src/markup.js')).isReload; // editor.js i
   const src = (await import('node:fs')).readFileSync('./src/editor.js', 'utf8'), m = re => src.match(re)[0];
   let release, downs = 0;
   const stage = { classList: { contains: () => false, remove() {} }, setPointerCapture() {} }, shot = {}, el = { style: {}, setAttribute() {} };
-  const t = new Function('$', 'stage', 'shot', 'sel', 'edit', 'document', 'URL', 'OffscreenCanvas', 'createImageBitmap', 'cropping', 'marking', 'cropDown', 'markDown', 'applyZoom', 'show',
+  const t = new Function('$', 'stage', 'shot', 'sel', 'edit', 'document', 'URL', 'OffscreenCanvas', 'createImageBitmap', 'cropping', 'marking', 'cropDown', 'markDown', 'applyZoom', 'show', 'report',
     `let gesture = false, editing = null, swapping = false, png = 'old', off = { x: 0, y: 0 }, original, box = { l: 2, t: 2, r: 6, b: 6 }, devicePixelRatio = 1;
     ${m(/function setShot\([\s\S]*?\n\}/)} ${m(/function endCrop\([\s\S]*?\n\}/)} ${m(/async function applyCrop\([\s\S]*?\n\}/)}
     ${m(/stage\.onpointerdown = [\s\S]*?\n\};/)} ${m(/stage\.onpointercancel = [\s\S]*?\n\};/)} ${m(/shot\.onload = [\s\S]*?\n\};/)} return applyCrop;`)(
     () => el, stage, shot, el, {}, { activeElement: { blur() {} }, querySelector: () => null }, { createObjectURL: () => 'blob:new', revokeObjectURL() {} },
     class { getContext() { return { drawImage() {} }; } convertToBlob() { return 'new'; } }, () => new Promise(r => { release = r; }),
-    () => false, () => true, () => downs++, () => downs++, () => {}, () => {});
+    () => false, () => true, () => downs++, () => downs++, () => {}, () => {}, () => {});
   const down = () => stage.onpointerdown({ button: 0, pointerId: 1, target: {}, preventDefault() {} }) || stage.onlostpointercapture({});
   const applying = t();
   down();
@@ -293,7 +293,7 @@ globalThis.isReload = (await import('./src/markup.js')).isReload; // editor.js i
   const els = {}, $ = id => (els[id] ??= { value: 'png', textContent: '' }), opts = { format: { value: 'png' } };
   let result;
   const [run, saved] = new Function('$', 'encode', 'invoke', 'png', 'state', 'opts', 'finishEdit', 'cropping',
-    `let saved = 'blank'; const ACTIONS = {${src.match(/async save\(fmt\) \{[\s\S]*?\n  \},/)[0]}}; ${src.match(/let busy[\s\S]*?\n\}/)[0]}; return [run, () => saved];`)(
+    `let saved = 'blank', report = () => {}; const ACTIONS = {${src.match(/async save\(fmt\) \{[\s\S]*?\n  \},/)[0]}}; ${src.match(/let busy[\s\S]*?\n\}/)[0]}; return [run, () => saved];`)(
     $, async () => new Blob(['x']), async (cmd, body, o) => { assert.deepStrictEqual([cmd, o.headers.ext], ['save', 'png']); return result(); }, {}, () => 'drawn', opts, () => {}, () => false);
   result = () => { throw 'Access is denied. (os error 5)'; };
   await run('save');
@@ -311,7 +311,7 @@ globalThis.isReload = (await import('./src/markup.js')).isReload; // editor.js i
   const src = (await import('node:fs')).readFileSync('./src/editor.js', 'utf8');
   const els = {}, $ = id => (els[id] ??= { value: 'png', textContent: '' }), opts = { format: { value: 'png' } }, log = [];
   const run = new Function('$', 'png', 'state', 'opts', 'finishEdit', 'ACTIONS', 'cropping',
-    `let saved; ${src.match(/let busy[\s\S]*?\n\}/)[0]}; return run;`)(
+    `let saved, report = () => {}; ${src.match(/let busy[\s\S]*?\n\}/)[0]}; return run;`)(
     $, {}, () => 's', opts, () => log.push('finish'), { copy: async () => (log.push('encode'), 'Copied') }, () => false);
   await run('copy');
   assert.deepStrictEqual(log, ['finish', 'encode'], 'Copy exported before the open text edit was finished');
@@ -331,7 +331,7 @@ globalThis.isReload = (await import('./src/markup.js')).isReload; // editor.js i
   key('null', 'select');
   assert.strictEqual(log.length, 3, 'Esc with the Save menu open stepped back or closed');
   globalThis.document = { querySelector: () => null };
-  const ask = new Function('state', 'saved', 'confirm', 'invoke', `${src.match(/const closeEditor = .*/)[0]} return closeEditor;`);
+  const ask = new Function('state', 'saved', 'confirm', 'invoke', `let modal; ${src.match(/const closeEditor = [\s\S]*?\n\};/)[0]} return closeEditor;`);
   const closed = [];
   ask(() => 'a', 'a', () => assert.fail('asked with nothing unsaved'), c => closed.push(c))();
   ask(() => 'b', 'a', () => false, c => closed.push(c))();
@@ -415,7 +415,7 @@ globalThis.isReload = (await import('./src/markup.js')).isReload; // editor.js i
   const ACTIONS = { async copy() { const at = screen; await new Promise(r => { release ??= r; if (release !== r) r(); }); copied.push(at); return 'Copied as PNG'; },
     async save() { copied.push('save'); return 'Saved'; } };
   const status = {};
-  const run = new Function('ACTIONS', 'png', 'finishEdit', '$', 'state', 'opts', 'cropping', `let saved; ${src} return run;`)(
+  const run = new Function('ACTIONS', 'png', 'finishEdit', '$', 'state', 'opts', 'cropping', `let saved, report = () => {}; ${src} return run;`)(
     ACTIONS, {}, () => {}, () => status, () => screen, { format: {} }, () => false);
   const first = run('copy');
   screen = 'box';
@@ -456,7 +456,7 @@ globalThis.isReload = (await import('./src/markup.js')).isReload; // editor.js i
 {
   const src = (await import('node:fs')).readFileSync('./src/editor.js', 'utf8');
   const ran = [], status = {};
-  const run = new Function('ACTIONS', 'png', '$', 'opts', 'finishEdit', 'state', 'cropping', `let busy = false, next = null, saved; ${src.match(/async function run\(key\) \{[\s\S]*?\n\}/)[0]} return run;`)(
+  const run = new Function('ACTIONS', 'png', '$', 'opts', 'finishEdit', 'state', 'cropping', `let busy = false, next = null, saved, report = () => {}; ${src.match(/async function run\(key\) \{[\s\S]*?\n\}/)[0]} return run;`)(
     { copy: async () => { ran.push('copy'); return 'Copied'; } }, {}, () => status, { format: {} }, () => {}, () => '', () => true);
   await run('copy');
   assert.deepStrictEqual(ran, [], 'Copy exported while a crop was pending');
@@ -554,4 +554,25 @@ for (const a of JSON.parse((await import('node:fs')).readFileSync('./src-tauri/t
 {
   const css = (await import('node:fs')).readFileSync('./src/index.html', 'utf8');
   assert.match(css.match(/#status \{[^}]*\}/)[0], /width: max-content/);
+}
+// Auto copy's CF_DIB: bottom-up BGRA under a 40-byte header.
+{
+  const { toDib } = await import('./src/pdf.js');
+  const d = toDib(new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]), 1, 2), v = new DataView(d.buffer); // top pixel 1,2,3,4; bottom 5,6,7,8
+  assert.deepStrictEqual([v.getUint32(0, true), v.getInt32(4, true), v.getInt32(8, true), v.getUint16(14, true), d.length], [40, 1, 2, 32, 48]);
+  assert.deepStrictEqual([...d.slice(40)], [7, 6, 5, 8, 3, 2, 1, 4]);
+}
+// Auto copy: only when leaving with unsaved markup and the setting on; never for our own dialogs (modal, busy) or mid-crop.
+{
+  const src = (await import('node:fs')).readFileSync('./src/editor.js', 'utf8');
+  const blur = ({ modal = false, busy = false, crop = false, editing = null, now = 'b', on = true }) => {
+    const ran = [];
+    const f = new Function('modal', 'busy', 'png', 'cropping', 'editing', 'state', 'saved', 'invoke', 'run',
+      `let onblur; ${src.match(/onblur = async [\s\S]*?\n\};/)[0]} return onblur;`)(
+      modal, busy, {}, () => crop, editing, () => now, 'a', async () => [{ autoCopy: on }], k => ran.push(k));
+    return f().then(() => ran.join());
+  };
+  assert.strictEqual(await blur({}), 'autocopy');
+  assert.strictEqual(await blur({ now: 'a', editing: 0 }), 'autocopy', 'a text being typed is unsaved');
+  for (const o of [{ modal: true }, { busy: true }, { crop: true }, { now: 'a' }, { on: false }]) assert.strictEqual(await blur(o), '', JSON.stringify(o));
 }

@@ -1,4 +1,4 @@
-import { canvasToPdf } from './pdf.js';
+import { canvasToPdf, toDib } from './pdf.js';
 import { toSvg, bounds, handles, move, resize, dragEdges, snap, nextSize, clean, isReload, editBox, LH, PAD, clearScroll, newTextY } from './markup.js';
 
 const $ = id => document.getElementById(id);
@@ -65,6 +65,17 @@ const ACTIONS = {
     await navigator.clipboard.write([new ClipboardItem({ 'image/png': encode('png') })]);
     return 'Copied as PNG';
   },
+  // Auto copy runs after the window lost focus, where navigator.clipboard refuses: Rust writes the same PNG, plus a DIB.
+  async autocopy() {
+    const png = await encode('png'), img = await createImageBitmap(png), c = new OffscreenCanvas(img.width, img.height), ctx = c.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+    const a = new Uint8Array(await png.arrayBuffer()), b = toDib(ctx.getImageData(0, 0, img.width, img.height).data, img.width, img.height);
+    const body = new Uint8Array(a.length + b.length);
+    body.set(a);
+    body.set(b, a.length);
+    // false: something newer was copied meanwhile, so this stays unsaved (Esc still asks).
+    return await invoke('clip', body, { headers: { png: String(a.length) } }) ? 'Copied as PNG' : '';
+  },
   // Prints the encoded image, so the markup is burned in (a filled box must not leave the pixels under it in a PDF).
   // ponytail: Chrome's own menu Print can't wait for the encode and still prints the live #shot + #ink pair.
   async print() {
@@ -85,7 +96,23 @@ const ACTIONS = {
 // What Save or Copy last exported: Esc closes without asking while nothing since is unsaved.
 const state = () => hist[step] + JSON.stringify(off);
 let saved = '[]{"x":0,"y":0}';
-const closeEditor = () => (state() === saved || confirm('Close without saving or copying your markup?')) && invoke('close');
+// Rust is told too: an editor with unsaved work doesn't take the next snip, and Max windows closes others first.
+// A text being typed or a stroke being drawn isn't in the history yet but counts.
+let reported = false;
+const report = () => { const d = editing != null || gesture || state() !== saved; if (d !== reported) invoke('dirty', { d: reported = d }); };
+// While set, focus loss is our own dialog's (or the window closing), not the user leaving: no Auto copy.
+let modal = false;
+const closeEditor = () => {
+  modal = true;
+  if (state() === saved || confirm('Close without saving or copying your markup?')) return invoke('close');
+  modal = false;
+};
+// Auto copy (a setting): leaving the window with unsaved markup copies it, as Copy would, so it counts as saved.
+// Save and Print dialogs hold `busy`; a pending crop isn't markup yet.
+onblur = async () => {
+  if (modal || busy || !png || cropping() || (editing == null && state() === saved)) return;
+  if ((await invoke('settings'))[0].autoCopy) run('autocopy');
+};
 
 // One action at a time: a second Save would open a second dialog, and encodes are heavy. A Copy pressed while one runs
 // waits its turn, so it exports what's on screen then instead of being dropped (filled boxes redact). Save/Print presses
@@ -104,6 +131,7 @@ async function run(key) {
     const at = state(), msg = await act(opts.format.value);
     $('status').textContent = msg;
     if (msg) saved = at; // Save or Copy went through; a cancelled picker or Print says nothing
+    report();
   } catch (e) {
     $('status').textContent = 'Failed: ' + (e.message ?? e); // Rust commands reject with a string
   } finally {
@@ -301,6 +329,7 @@ function render() {
   // The dock shows only what applies to the selected shape, else to the tool: c(olor) w(idth) f(ill) s(ize) d(elete). Empty hides it.
   $('props').dataset.k = (KINDS[s?.type ?? tool] + (s ? ' d' : '')).trim();
   $('tsize').textContent = Math.round((s?.size ?? style.pen.size) / dpr);
+  report();
 }
 function commit() {
   const j = JSON.stringify(shapes);
@@ -499,6 +528,7 @@ stage.onpointercancel = stage.onlostpointercapture = e => {
   stage.onpointerup?.(e);
   stage.onpointermove = stage.onpointerup = null;
   gesture = false;
+  report();
 };
 onkeydown = e => {
   // Shortcuts follow the letter on Latin layouts (Dvorak too) and the physical key on others, like Chrome's print.

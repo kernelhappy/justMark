@@ -25,28 +25,34 @@ when changing anything structural (see Budgets).
   center it there and show it.
 - **Open with / second launch**: argv files go to the running instance (single-instance plugin) and open
   like a snip. The NSIS bundle registers png/jpg/jpeg as "Editor" associations.
-- **Tray**: "Start at login" (HKCU Run entry, quoted exe path, via the `auto-launch` crate in CurrentUser
-  mode; off by default) and "Quit". Closing the last window never exits the process; only Quit does.
+- **Tray**: "Settings…" (see Settings) and "Quit". Closing the last window never exits the process; only Quit does.
 - **Save dialog errors look like Cancel** (known limit, accepted 2026-10-13): `rfd` maps a COM/dialog error to
   `None`. Fixing it means our own IFileDialog code; not worth it for a rare failure.
 
-## Settings (decided 2026-10-13, not built yet)
+## Settings (built 2026-10-13)
 
-A **Settings…** tray item opens a small settings window (a WebView2 window like the editor: ~100 MB only
-while open, nothing idle). Settings live in a small file in the app config dir, read by Rust (the
-window-opening rules apply before any page exists). The tray menu becomes Settings… and Quit; Start at
-login moves into the window.
+A **Settings…** tray item opens a small settings window (`settings.html`; a WebView2 window like the
+editor: ~100 MB only while open, nothing idle; one at a time, Esc closes it, not an editor so it never
+counts toward Max windows). Every change applies at once, no Save button. Settings live in
+`settings.json` in the app config dir (`%APPDATA%\io.github.snarkymark`), read by Rust (the
+window-opening rules apply before any page exists); a missing file or field means the default.
 
 | Setting | Default | Behavior |
 |---|---|---|
 | Auto open on snip | on | Off: snips only land in the folder. |
-| Open latest snip hotkey | Shift+Alt+S | Global hotkey (Tauri global-shortcut plugin) opens the most recent snip, whatever Auto open is set to. Configurable; the window shows "taken" when registration fails. PrtScn is left to Windows (never offered). |
-| New snip opens a new window | on | Off: the snip replaces the image in the last-used editor if it has no unsaved work; otherwise a new window opens. |
-| Max windows | 5 | Opening one more closes the oldest window **without** unsaved work; if every window has unsaved work, the oldest closes anyway, silently (user's call: bounds memory on bursts, e.g. bulk copies or OneDrive sync-down). |
-| Auto copy on focus loss | off | When an editor loses focus and its markup changed since the last Save/Copy, it copies the marked-up PNG (same as Copy, so it counts as saved and Esc then closes without asking). |
-| Start at login | off | As in Tray above. |
+| Open latest snip hotkey | Shift+Alt+S | Global hotkey (Tauri global-shortcut plugin) opens the most recent snip (newest image in the Screenshots folder by creation time), whatever Auto open is set to. If it's already open, its window comes to the front instead. Otherwise it follows New snip opens a new window, like a snip. Recorded in the window (a modifier is required, bare F-keys aside), can be cleared to none; the window shows "taken" when registration fails. PrtScn is left to Windows (never offered). Stored as global-hotkey syntax with DOM key codes (`Shift+Alt+KeyS`). |
+| New snip opens a new window | on | Off: the snip replaces the image in the last-focused editor if it has no unsaved work; otherwise a new window opens. The replaced editor keeps its size and position, and the new image is fit to it (the page reloads: undo history starts over). Open with always gets a new window. |
+| Max windows | 5 | Opening one more closes the oldest-**opened** window **without** unsaved work; if every window has unsaved work, the oldest closes anyway, silently (user's call: bounds memory on bursts, e.g. bulk copies or OneDrive sync-down). Counts every editor, however it was opened. |
+| Auto copy on focus loss | off | When an editor loses focus and has unsaved work, it copies the marked-up PNG (same as Copy, so it counts as saved and Esc then closes without asking). Not for focus lost to its own Save/Print dialog or close confirm. |
+| Start at login | off | HKCU Run entry, quoted exe path, via the `auto-launch` crate in CurrentUser mode. The checkbox flips the entry's real state (Task Manager can change it behind the window). |
 
-"Unsaved work" = the same check as Esc's confirm (markup or crop not Saved or Copied since).
+"Unsaved work" = the same check as Esc's confirm (markup or crop not Saved or Copied since), plus a text
+being typed or a stroke being drawn. The page reports it to Rust (`dirty`) whenever it changes.
+
+Auto copy can't use `navigator.clipboard` (Chromium refuses once the document isn't focused:
+"Document is not focused"), so the page encodes the PNG plus a CF_DIB and Rust writes both (`clip`).
+If anything was copied since the window lost focus (another app, or another editor left later whose
+smaller image encoded first), Rust writes nothing and the markup stays unsaved: the newer copy wins.
 
 ## Architecture
 
@@ -65,6 +71,10 @@ login moves into the window.
     (`rfd`, parented to the editor), suggests `<image stem>.<ext>`, writes `<name>.part` then renames.
     Returns the file name or null on cancel.
   - `close` → destroy the window.
+  - `dirty(d)` → this editor has unsaved work (see Settings). `clip` → body = PNG then CF_DIB, header
+    `png` = the PNG's length; false when a newer copy happened (see Settings).
+  - Settings window: `settings` → [settings, hotkey registered, Start at login on]; `set_settings(s)` →
+    hotkey registered; `login` → flips Start at login, returns the real state.
   - Page name: the URL hash carries the image stem (percent-encoded), used for `document.title`.
 - **Editor = JustSave's** (`markup.js`, `pdf.js` unchanged; `editor.js`/`index.html` from
   `result.js`/`result.html` at JustSave `5cece1b`). Shapes: highlighter, pen, line, arrow, rect, ellipse,
@@ -91,7 +101,7 @@ login moves into the window.
 
 | | measured |
 |---|---|
-| Idle (tray only, no window) | 1.6–4.4 MB private working set |
+| Idle (tray only, no window) | 1.6–4.4 MB private working set (2026-10-13 with Settings + hotkey: 1.6 MB at start, 3.9 MB after the settings window or editors closed) |
 | One editor window open | ~100–105 MB private WS (7 processes) |
 | Watcher event → window shown | 0.44–0.60 s |
 | Mouse-up → file created (Snipping Tool) | ~150–190 ms (clipboard is ~80–100 ms) |

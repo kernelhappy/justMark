@@ -40,3 +40,17 @@
   Win+Shift+S in muscle memory. Rejected: Ctrl+Alt+S (JetBrains/Visual Studio; it's AltGr+S on Polish and
   other layouts), Ctrl+Win+S (Windows Speech Recognition). PrtScn stays Windows' (user: leave it alone).
   Max windows: prefer closing a window without unsaved work; with none, close the oldest anyway (user).
+- **2026-10-13 — Settings gaps** (asked before building):
+  - Max windows' "oldest" = opened first, not least recently used (user's choice).
+  - A snip replacing an editor's image keeps that window's size and position and fits the image to it (user),
+    rather than re-fitting and re-centering like a new window.
+  - Open latest snip follows the New-window rule like a snip (user); Open with always gets a new window.
+  - Defaults accepted without discussion: latest = newest image in Screenshots (by creation time: a copied
+    file keeps its source's modified time); already open → focus it; hotkey clearable; settings apply live;
+    one settings window, Esc closes it, not counted in Max windows; JSON via serde (already in the tree).
+- **2026-10-13 — Auto copy writes the clipboard from Rust** (found while building): `navigator.clipboard.write`
+  rejects after focus loss ("Document is not focused", probed in WebView2 154). The page sends PNG + CF_DIB;
+  Rust writes them with `windows-sys` (already in the tree; only features added). A copy is dropped, and the
+  markup stays unsaved, when the clipboard changed since the window lost focus (sequence number), so a slow
+  large encode can't overwrite a newer copy (seen in testing: a 3612×1913 encode finished after a later
+  257×215 one). Rejected: copying on every change (the decided trigger is focus loss).

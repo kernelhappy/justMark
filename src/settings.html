@@ -1,0 +1,83 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>snarkymark settings</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --accent: light-dark(#6553f5, #8f82ff);
+    --bg: light-dark(#f6f7f9, #17181d);
+    --line: light-dark(#0000001a, #ffffff17);
+    --text: light-dark(#1b1d22, #e9eaee);
+    --muted: light-dark(#6b7080, #9ca1ad);
+    --hover: light-dark(#0000000d, #ffffff12);
+    --danger: light-dark(#d93a32, #ff6b63);
+  }
+  body { margin: 0; padding: 8px 20px 16px; font: 13px/1.35 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; color: var(--text); background: var(--bg); }
+  label, .row { display: flex; align-items: center; gap: 12px; min-height: 44px; border-top: 1px solid var(--line); }
+  form > :first-child { border-top: 0; }
+  .name { flex: 1; }
+  .hint { display: block; color: var(--muted); font-size: 12px; }
+  input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--accent); }
+  input[type=number] { width: 56px; font: inherit; }
+  button { font: inherit; color: inherit; padding: 4px 10px; border: 1px solid var(--line); border-radius: 6px; background: transparent; cursor: pointer; }
+  button:hover { background: var(--hover); }
+  #key { min-width: 120px; font-weight: 600; }
+  #key[aria-pressed=true] { outline: 2px solid var(--accent); }
+  #taken, #err { color: var(--danger); }
+  [hidden] { display: none !important; }
+</style>
+<form id="f">
+  <label><span class="name">Auto open on snip<span class="hint">Off: snips only land in the Screenshots folder.</span></span><input type="checkbox" name="autoOpen"></label>
+  <div class="row"><span class="name">Open latest snip<span class="hint" id="taken" hidden>Taken by another app, or not usable: pick another.</span></span>
+    <button type="button" id="key" title="Click, then press the keys"></button><button type="button" id="clear">Clear</button></div>
+  <label><span class="name">New snip opens a new window<span class="hint">Off: it goes into the last-used editor, unless that has unsaved markup.</span></span><input type="checkbox" name="newWindow"></label>
+  <label><span class="name">Max windows<span class="hint">One more closes the oldest, without unsaved markup if any.</span></span><input type="number" name="maxWindows" min="1" max="50" required></label>
+  <label><span class="name">Auto copy on focus loss<span class="hint">Leaving an editor with unsaved markup copies it.</span></span><input type="checkbox" name="autoCopy"></label>
+  <label><span class="name">Start at login</span><input type="checkbox" id="login"></label>
+  <p id="err" hidden></p>
+</form>
+<script>
+  const { invoke } = window.__TAURI__.core;
+  const f = document.getElementById('f'), key = document.getElementById('key'), err = document.getElementById('err');
+  let s;
+  // Stored as global-hotkey reads it, with DOM key codes ("Shift+Alt+KeyS"); shown as "Shift+Alt+S".
+  const shown = k => k ? k.replace(/Key|Digit/, '').replace('Super', 'Win') : 'None';
+  const show = held => {
+    for (const n of ['autoOpen', 'newWindow', 'autoCopy']) f[n].checked = s[n];
+    f.maxWindows.value = s.maxWindows;
+    key.textContent = shown(s.hotkey);
+    document.getElementById('taken').hidden = held;
+  };
+  // Every change applies at once (Rust stores it and re-registers the hotkey); there is no Save button.
+  // One at a time, so a quick second change can't land before the first and be overwritten by it.
+  let queue = Promise.resolve();
+  const apply = () => queue = queue.then(async () => {
+    try { err.hidden = true; show(await invoke('set_settings', { s: { ...s } })); }
+    catch (e) { err.textContent = e; err.hidden = false; }
+  });
+  invoke('settings').then(([v, held, login]) => { s = v; show(held); document.getElementById('login').checked = login; });
+  f.onchange = ({ target: t }) => {
+    if (t.id === 'login') return invoke('login').then(on => { t.checked = on; }); // the entry's real state
+    if (t.name === 'maxWindows' && !t.checkValidity()) return;
+    s[t.name] = t.type === 'checkbox' ? t.checked : +t.value;
+    apply();
+  };
+  document.getElementById('clear').onclick = () => { s.hotkey = ''; apply(); };
+  // Recording: click the key, press a combination. A modifier is needed (bare F-keys aside) so typing isn't taken over;
+  // PrintScreen stays Windows'. Esc cancels the recording; otherwise it closes the window.
+  const record = on => { key.setAttribute('aria-pressed', on); key.textContent = on ? 'Press keys…' : shown(s.hotkey); };
+  key.onclick = () => record(true);
+  key.onblur = () => record(false);
+  onkeydown = e => {
+    const recording = key.getAttribute('aria-pressed') === 'true';
+    if (e.key === 'Escape') return recording ? record(false) : invoke('close');
+    if (!recording) return;
+    e.preventDefault();
+    if (['Control', 'Shift', 'Alt', 'Meta'].includes(e.key) || e.code === 'PrintScreen' || !e.code) return;
+    const mods = [e.ctrlKey && 'Ctrl', e.shiftKey && 'Shift', e.altKey && 'Alt', e.metaKey && 'Super'].filter(Boolean);
+    if (!mods.length && !/^F\d+$/.test(e.code)) return;
+    s.hotkey = [...mods, e.code].join('+');
+    record(false);
+    apply();
+  };
+</script>
