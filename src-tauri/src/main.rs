@@ -100,11 +100,12 @@ fn open(app: &AppHandle, path: PathBuf, t0: Instant, from_watcher: bool) {
         .bytes()
         .map(|b| if b.is_ascii_alphanumeric() { (b as char).to_string() } else { format!("%{b:02X}") })
         .collect();
-    app.state::<Shots>().0.lock().unwrap().insert(label.clone(), (path, t0, from_watcher));
-    let built = WebviewWindowBuilder::new(app, &label, WebviewUrl::App(format!("index.html#{hash}").into()))
-        .title(&name)
-        .visible(false)
-        .build();
+    let built = with_shot(&app.state::<Shots>(), &label, (path, t0, from_watcher), || {
+        WebviewWindowBuilder::new(app, &label, WebviewUrl::App(format!("index.html#{hash}").into()))
+            .title(&name)
+            .visible(false)
+            .build()
+    });
     match built {
         Ok(w) => {
             eprintln!("{label} window built {:?}", t0.elapsed());
@@ -117,6 +118,26 @@ fn open(app: &AppHandle, path: PathBuf, t0: Instant, from_watcher: bool) {
         }
         Err(e) => eprintln!("{label} window failed: {e}"),
     }
+}
+
+/// Registers the window's image before building it (the page asks for it at once), and drops it if the build
+/// fails: no window means no Destroyed event to remove it.
+fn with_shot<W, E>(shots: &Shots, label: &str, shot: (PathBuf, Instant, bool), build: impl FnOnce() -> Result<W, E>) -> Result<W, E> {
+    shots.0.lock().unwrap().insert(label.into(), shot);
+    let built = build();
+    if built.is_err() {
+        shots.0.lock().unwrap().remove(label);
+    }
+    built
+}
+
+#[test]
+fn a_failed_window_build_leaves_no_shot() {
+    let shots = Shots::default();
+    let shot = || (PathBuf::new(), Instant::now(), false);
+    assert!(with_shot(&shots, "a", shot(), || Err::<(), _>(())).is_err());
+    assert!(with_shot(&shots, "b", shot(), || Ok::<_, ()>(())).is_ok());
+    assert_eq!(shots.0.lock().unwrap().keys().collect::<Vec<_>>(), ["b"]);
 }
 
 /// Off the main thread (see `blocking`): it can wait for the file, which the window started loading alongside.
