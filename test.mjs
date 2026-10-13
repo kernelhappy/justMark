@@ -419,3 +419,7 @@ globalThis.isReload = (await import('./src/markup.js')).isReload; // editor.js i
   for (const e of [{ key: 'r' }, { key: 'F6' }, { key: 's', ctrlKey: true }, { key: 'p', code: 'KeyR', ctrlKey: true }]) assert(!isReload(e), JSON.stringify(e));
 }
 console.log('ok');
+
+// File-association ProgID must be namespaced: NSIS uses `name` as the HKCU\Software\Classes key and uninstall deletes it.
+for (const a of JSON.parse((await import('node:fs')).readFileSync('./src-tauri/tauri.conf.json', 'utf8')).bundle.fileAssociations)
+  assert.match(a.name, /^snarkymark\./, 'fileAssociations name must be namespaced');
