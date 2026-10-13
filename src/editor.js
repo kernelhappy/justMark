@@ -354,14 +354,15 @@ function render() {
     }
   }
   const now = styleNow(s);
-  for (const b of document.querySelectorAll('[data-tool], [data-c], [data-w], [data-fill], [data-cmd]')) {
+  for (const b of document.querySelectorAll('[data-tool], [data-c], [data-fill], [data-cmd]')) {
     const d = b.dataset;
     if (d.cmd) b.disabled = d.cmd === 'undo' ? !step : d.cmd === 'redo' ? step === hist.length - 1 : !s;
-    else b.setAttribute('aria-pressed', d.tool ? d.tool === tool : d.c ? d.c === now.c : d.w ? +d.w === Math.round(now.w) : !!now.fill);
+    else b.setAttribute('aria-pressed', d.tool ? d.tool === tool : d.c ? d.c === now.c : !!now.fill);
   }
   // The dock shows only what applies to the selected shape, else to the tool: c(olor) w(idth) f(ill) s(ize) d(elete). Empty hides it.
   $('props').dataset.k = (KINDS[s?.type ?? tool] + (s ? ' d' : '')).trim();
   $('tsize').textContent = now.size ? Math.round(now.size) : '';
+  $('wval').textContent = now.w ? Math.round(now.w) : '';
   report();
 }
 // Each history step is [shapes, crop].
@@ -391,9 +392,14 @@ function remove() {
 oncontextmenu = e => e.target === edit || e.preventDefault();
 // A press must not blur an open text editor: finishEdit would delete an empty new text before the click lands.
 $('tools').onmousedown = $('props').onmousedown = $('zoombar').onmousedown = $('savemenu').onmousedown = $('status').onmousedown = e => e.preventDefault();
-$('tools').onclick = $('props').onclick = ({ target }) => {
+$('tools').onclick = $('props').onclick = ({ target, detail }) => {
   if (gesture) return;
   const d = target.closest('button')?.dataset ?? {}, s = shapes[cur];
+  // Weight and text size −/+ step on press (see onpointerdown below); a click from the keyboard (detail 0) is one step.
+  if (d.step) {
+    if (!detail) { stepStyle(d.step, +d.d); if (editing == null) commit(); }
+    return;
+  }
   // Tool, Undo, Redo and Delete end an open edit first; on an empty new text that just cancels it, so Undo doesn't also undo the last commit.
   if (editing != null && (d.tool || d.cmd)) {
     const empty = !edit.value.trimEnd();
@@ -411,16 +417,38 @@ $('tools').onclick = $('props').onclick = ({ target }) => {
   } else if (d.cmd) { if (cropping()) endCrop(); ({ undo: () => go(-1), redo: () => go(1), del: remove })[d.cmd](); }
   else {
     // A style button restyles the selected shape and sets its tool's style (the next shape of that kind gets it too).
-    const k = d.c ? 'c' : d.w ? 'w' : d.size ? 'size' : 'fill' in d ? 'fill' : null;
+    const k = d.c ? 'c' : 'fill' in d ? 'fill' : null;
     if (!k) return;
-    const now = styleNow(s), v = k === 'c' ? d.c : k === 'w' ? +d.w : k === 'size' ? nextSize(now.size, +d.size) : !now.fill;
+    const v = k === 'c' ? d.c : !styleNow(s).fill;
     setStyle(s?.type ?? tool, k, v);
     if (s && k in s) {
-      shapes[cur] = { ...s, [k]: k === 'w' || k === 'size' ? v * dpr : v };
+      shapes[cur] = { ...s, [k]: v };
       return editing == null ? commit() : render(); // an open edit commits its style with its text
     }
   }
   render();
+};
+// One step of weight (1–16 screen px) or text size (the size list) for the selected shape and its tool, or the tool.
+function stepStyle(k, d) {
+  const s = shapes[cur], now = styleNow(s), v = k === 'w' ? Math.min(16, Math.max(1, Math.round(now.w) + d)) : nextSize(now.size, d);
+  setStyle(s?.type ?? tool, k, v);
+  if (s && k in s) shapes[cur] = { ...s, [k]: v * dpr };
+  render();
+}
+// Holding − or + repeats: one step, then after 400 ms ~12 steps/s until release or the pointer leaves.
+// A held run on a selected shape is one undo step (an open text edit commits it with its text).
+$('props').onpointerdown = e => {
+  const b = e.target.closest('[data-step]');
+  if (!b || e.button || gesture) return;
+  const once = () => stepStyle(b.dataset.step, +b.dataset.d);
+  once();
+  let t = setTimeout(() => { t = setInterval(once, 83); }, 400);
+  b.onpointerup = b.onpointerleave = b.onpointercancel = () => {
+    clearTimeout(t);
+    clearInterval(t);
+    b.onpointerup = b.onpointerleave = b.onpointercancel = null;
+    if (editing == null) commit();
+  };
 };
 
 function startEdit(i) {

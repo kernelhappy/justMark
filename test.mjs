@@ -94,7 +94,8 @@ const toolbar = ({ shapes = [], cur = null, editing = null, tool = 'select', dpr
   const tools = {};
   const get = new Function('$', 'shapes', 'commit', 'render', 'finishEdit', 'go', 'edit', 'localStorage', 'nextSize', 'cropping', 'stage',
     `let gesture = false, cur = ${cur}, editing = ${editing}, tool = '${tool}', dpr = ${dpr}, remove; ${STYLE_SRC}
-    ${SRC.match(/\$\('tools'\)\.onmousedown = .*/)[0]}; ${SRC.match(/\$\('tools'\)\.onclick = [\s\S]*?\n};/)[0]} return () => ({ cur, editing, styleOf });`)(
+    ${SRC.match(/\$\('tools'\)\.onmousedown = .*/)[0]}; ${SRC.match(/\$\('tools'\)\.onclick = [\s\S]*?\n};/)[0]} ${SRC.match(/function stepStyle\([\s\S]*?\n\}/)[0]}
+    return () => ({ cur, editing, styleOf });`)(
     () => tools, shapes, () => log.push('commit'), () => {}, () => log.push('finish'), () => log.push('go'), edit, store, nextSize, () => false, { dataset: {} });
   return { tools, click: dataset => tools.onclick({ target: { closest: () => ({ dataset }) } }), get, store, log };
 };
@@ -106,8 +107,9 @@ const toolbar = ({ shapes = [], cur = null, editing = null, tool = 'select', dpr
   t.click({ c: 'blue' });
   assert.deepStrictEqual([shapes[0].c, t.get().styleOf('rect').c, t.get().styleOf('line').c], ['blue', 'blue', '#e53935'], 'color went to another tool');
   const u = toolbar({ shapes, cur: 1, dpr: 2, store: t.store });
-  u.click({ w: '2' });
-  assert.deepStrictEqual([shapes[1].w, u.get().styleOf('line').w], [4, 2], 'weight is picked in screen px, stored in capture px');
+  u.click({ step: 'w', d: '-1' }); // from the keyboard: one step
+  assert.deepStrictEqual([shapes[1].w, u.get().styleOf('line').w], [6, 3], 'weight is picked in screen px, stored in capture px');
+  assert.ok(u.log.includes('commit'));
   assert.strictEqual(JSON.parse(t.store['style.rect']).c, 'blue', 'not in localStorage');
   t.store['style.pen'] = '{oops';
   assert.strictEqual(t.get().styleOf('pen').c, '#e53935', 'corrupt storage did not fall back to the default');
@@ -629,4 +631,26 @@ for (const a of JSON.parse((await import('node:fs')).readFileSync('./src-tauri/t
   const right = { ...left, tip: [0, 50] };
   assert.strictEqual(retext(right, 'x', 9, off).x, 200, 'right-of-point callout moved');
   assert.strictEqual(retext({ type: 'text', size: 10, x: 1, y: 2, text: '', em: 0 }, 'ab', 2, off).x, 1);
+}
+// Weight −/+: 1–16, step 1; holding repeats after 400 ms at ~12/s until release or leave, and a held run is one undo step.
+{
+  const timers = [], clear = i => { if (timers[i - 1]) timers[i - 1].dead = true; };
+  const shapes = [{ type: 'rect', c: 'red', w: 4 }], log = [], store = {}, btn = { dataset: { step: 'w', d: '1' } }, props = {};
+  const [down, get] = new Function('$', 'shapes', 'render', 'commit', 'localStorage', 'nextSize', 'setTimeout', 'setInterval', 'clearTimeout', 'clearInterval',
+    `let gesture = false, cur = 0, editing = null, tool = 'select', dpr = 1; ${STYLE_SRC} ${SRC.match(/function stepStyle\([\s\S]*?\n\}/)[0]}
+    ${SRC.match(/\$\('props'\)\.onpointerdown = [\s\S]*?\n\};/)[0]} return [$('props').onpointerdown, () => ({ w: shapes[0].w, st: styleOf('rect').w })];`)(
+    () => props, shapes, () => {}, () => log.push('commit'), store, nextSize,
+    (f, ms) => timers.push({ f, ms }), (f, ms) => timers.push({ f, ms, every: true }), clear, clear);
+  down({ button: 0, target: { closest: () => btn } });
+  assert.deepStrictEqual([get().w, timers[0].ms], [5, 400], 'press: one step, repeat after 400 ms');
+  timers[0].f();
+  assert.ok(timers[1].every && timers[1].ms >= 80 && timers[1].ms <= 85, 'repeat is ~12 steps/s');
+  for (let i = 0; i < 20; i++) timers[1].f();
+  assert.deepStrictEqual(get(), { w: 16, st: 16 }, 'weight not clamped at 16');
+  assert.deepStrictEqual(log, [], 'committed during the hold');
+  btn.onpointerleave();
+  assert.deepStrictEqual([log.length, timers[1].dead, btn.onpointerup], [1, true, null], 'leaving the button ends the run as one undo step');
+  btn.dataset.d = '-1';
+  for (let i = 0; i < 20; i++) { down({ button: 0, target: { closest: () => btn } }); btn.onpointerup(); }
+  assert.strictEqual(get().w, 1, 'weight not clamped at 1');
 }
