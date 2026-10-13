@@ -506,7 +506,7 @@ for (const a of JSON.parse((await import('node:fs')).readFileSync('./src-tauri/t
 // Zoom pill, Save menu and status toast presses must not blur an open text editor (would delete an empty new text).
 {
   const src = (await import('node:fs')).readFileSync('./src/editor.js', 'utf8');
-  const line = src.match(/.*\.onmousedown = e => e\.preventDefault\(\);/)[0];
+  const line = src.match(/.*\.onmousedown = e => .*preventDefault\(\);/)[0];
   for (const id of ['tools', 'props', 'zoombar', 'savemenu', 'status']) assert(line.includes(`$('${id}')`), `${id} mousedown guard`);
 }
 // A Select click with sub-threshold jitter must not move the shape (no undo step, no dirty state).
@@ -758,4 +758,25 @@ for (const a of JSON.parse((await import('node:fs')).readFileSync('./src-tauri/t
   k({ ctrlKey: true, key: 'z', target: { tagName: 'BODY' }, preventDefault() {} });
   assert.deepStrictEqual(log, ['end', 'go'], 'Ctrl+Z with a polygon being drawn');
   assert.match(SRC.match(/\$\('crop'\)\.onclick = [\s\S]*?\n\};/)[0], /finishEdit\(\);\n  endPoly\(\);/, 'Crop does not close a polygon being drawn');
+}
+// Sliders in the dock's menus must keep their mousedown (the dock blocks it elsewhere to keep an open text focused).
+{
+  const line = SRC.match(/.*\.onmousedown = e => .*/)[0];
+  let prevented = 0;
+  const f = new Function('e', line.slice(line.indexOf('=> ') + 3).replace(/;$/, ''));
+  f({ target: { type: 'range' }, preventDefault: () => prevented++ });
+  assert.strictEqual(prevented, 0, 'a slider press was prevented, so it cannot be dragged');
+  f({ target: { type: 'submit' }, preventDefault: () => prevented++ });
+  assert.strictEqual(prevented, 1);
+  assert.ok(line.includes("$('seemenu')") && line.includes("$('fillmenu')"));
+}
+// See-through opacity: the slider sets op and turns See-through on; the group uses op (40% when missing).
+{
+  const shapes = [{ type: 'rect', c: 'red', w: 4, dpr: 1, fill: 'solid', l: 0, t: 0, r: 50, b: 50 }];
+  const restyle = new Function('shapes', 'localStorage', 'commit', 'render', `let cur = 0, poly = null, editing = null, tool = 'select', dpr = 1; ${STYLE_SRC} ${SRC.match(/function restyle\([\s\S]*?\n\}/)[0]}
+    const opacity = {}; ${SRC.match(/\$\('opacity'\)\.oninput = .*/)[0].replace("$('opacity')", 'opacity')} return [opacity.oninput, styleOf];`)(shapes, {}, () => {}, () => {});
+  restyle[0]({ target: { value: '70' } });
+  assert.deepStrictEqual([shapes[0].see, shapes[0].op, restyle[1]('rect').op], [true, 0.7, 0.7]);
+  assert.match(toSvg(shapes, { x: 0, y: 0, w: 9, h: 9 }), /<g opacity="0.7">/);
+  assert.match(toSvg([{ ...shapes[0], op: undefined }], { x: 0, y: 0, w: 9, h: 9 }), /<g opacity="0.4">/);
 }

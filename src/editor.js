@@ -312,11 +312,11 @@ let shapes = [], hist = ['[[],null]'], step = 0, off = { x: 0, y: 0 }, tool = 's
 // Each tool's style, in screen pixels, for its next shape. Kept in localStorage (shared by every editor window, like Save's
 // format), one key per tool so two windows restyling different tools don't overwrite each other.
 const RED = '#e53935', STYLES = {
-  // see: see-through (40%, covers nothing).
-  hl: { c: '#fdd835', w: 4 }, pen: { c: RED, w: 4, see: false }, line: { c: RED, w: 4, see: false }, arrow: { c: RED, w: 4, see: false },
+  // see: see-through (covers nothing), at opacity op.
+  hl: { c: '#fdd835', w: 4 }, pen: { c: RED, w: 4, see: false, op: 0.4 }, line: { c: RED, w: 4, see: false, op: 0.4 }, arrow: { c: RED, w: 4, see: false, op: 0.4 },
   // fill: false or what it is (see FILLS); last: what Fill's button turns on; dn: pattern density.
-  rect: { c: RED, w: 4, fill: false, last: 'solid', dn: 1, see: false }, ellipse: { c: RED, w: 4, fill: false, last: 'solid', dn: 1, see: false },
-  cloud: { c: RED, w: 4, fill: false, last: 'solid', dn: 1, see: false }, poly: { c: RED, w: 4, fill: false, last: 'solid', dn: 1, see: false },
+  rect: { c: RED, w: 4, fill: false, last: 'solid', dn: 1, see: false, op: 0.4 }, ellipse: { c: RED, w: 4, fill: false, last: 'solid', dn: 1, see: false, op: 0.4 },
+  cloud: { c: RED, w: 4, fill: false, last: 'solid', dn: 1, see: false, op: 0.4 }, poly: { c: RED, w: 4, fill: false, last: 'solid', dn: 1, see: false, op: 0.4 },
   text: { c: RED, size: 20, fc: null }, callout: { c: RED, w: 4, size: 20, fc: '#fff', tc: '#111' },
 };
 function styleOf(t) {
@@ -392,6 +392,10 @@ function render() {
   const kind = now.fill === true ? 'solid' : now.fill || 'none';
   for (const b of $('fks').children) b.setAttribute('aria-pressed', b.dataset.fk === kind);
   $('density').value = now.dn ?? 1;
+  $('opacity').value = Math.round((now.op ?? 0.4) * 100);
+  $('opval').textContent = $('opacity').value + '%';
+  // The weight shows as the line itself: its color, and its thickness on screen (a highlighter draws 4×), up to 16 px.
+  Object.assign($('wprev').style, { height: Math.max(1, Math.min(16, Math.round(now.w * (t === 'hl' ? 4 : 1)))) + 'px', background: now.c });
   // The dock shows only what applies to the selected shape, else to the tool: c(olor) w(idth) f(ill) s(ize) d(elete). Empty hides it.
   $('props').dataset.k = (KINDS[s?.type ?? tool] + (s ? ' d' : '')).trim();
   $('tsize').textContent = now.size ? Math.round(now.size) : '';
@@ -424,7 +428,8 @@ function remove() {
 // No browser menu (Back, Reload, Save as…); the text editor keeps its cut/copy/paste menu.
 oncontextmenu = e => e.target === edit || e.preventDefault();
 // A press must not blur an open text editor: finishEdit would delete an empty new text before the click lands.
-$('tools').onmousedown = $('props').onmousedown = $('zoombar').onmousedown = $('savemenu').onmousedown = $('fillmenu').onmousedown = $('status').onmousedown = e => e.preventDefault();
+// Sliders keep theirs: without it they can't be dragged.
+$('tools').onmousedown = $('props').onmousedown = $('zoombar').onmousedown = $('savemenu').onmousedown = $('fillmenu').onmousedown = $('seemenu').onmousedown = $('status').onmousedown = e => e.target?.type === 'range' || e.preventDefault();
 // Fill's menu, with a preview of each fill in the text color.
 $('fks').innerHTML = FILLS.map(([k, n]) => `<button data-fk="${k}" aria-label="${n}" data-tip="" class="tip-up"><svg viewBox="0 0 20 20">${
   k === 'none' ? '<rect x=".5" y=".5" width="19" height="19" rx="3" fill="none" stroke="currentColor" stroke-opacity=".35"/><path d="M4 16 16 4" stroke="var(--danger)" stroke-width="1.5"/>'
@@ -483,6 +488,9 @@ function restyle(ch, held) {
 // Density scales every pattern's spacing; dragging it is one undo step.
 $('density').oninput = ({ target }) => restyle({ dn: +target.value }, true);
 $('density').onchange = () => editing == null && poly == null && commit();
+// Opacity of a see-through shape; moving it turns See-through on (off, it would change nothing).
+$('opacity').oninput = ({ target }) => restyle({ see: true, op: target.value / 100 }, true);
+$('opacity').onchange = $('density').onchange;
 // One step of weight (1–16 screen px) or text size (the size list) for the selected shape and its tool, or the tool.
 function stepStyle(k, d) {
   const i = cur ?? poly, s = shapes[i], now = styleNow(s), v = k === 'w' ? Math.min(16, Math.max(1, Math.round(now.w) + d)) : nextSize(now.size, d);
@@ -537,14 +545,14 @@ edit.oninput = () => (shapes[editing]?.tip || shapes[editing]?.fc) && render(); 
 addEventListener('beforeprint', finishEdit);
 
 function newShape(p) {
-  const st = styleOf(tool), c = st.c, w = st.w * dpr, size = st.size * dpr, see = st.see || undefined;
+  const st = styleOf(tool), c = st.c, w = st.w * dpr, size = st.size * dpr, see = st.see || undefined, op = see && st.op;
   if (tool === 'hl') return { type: tool, c, w, pts: [p] };
-  if (tool === 'pen') return { type: tool, c, w, see, pts: [p] };
-  if (tool === 'line') return { type: tool, c, w, see, pts: [p, p] };
+  if (tool === 'pen') return { type: tool, c, w, see, op, pts: [p] };
+  if (tool === 'line') return { type: tool, c, w, see, op, pts: [p, p] };
   // dpr: arrowheads, callout pointers and cloud scallops keep the minimum size they had when drawn
-  if (tool === 'arrow') return { type: tool, c, w, dpr, see, pts: [p, p] };
+  if (tool === 'arrow') return { type: tool, c, w, dpr, see, op, pts: [p, p] };
   if (tool === 'callout') return { type: tool, c, w, dpr, size, fc: st.fc, tc: st.tc, x: p[0], y: p[1], text: '', em: 0, tip: p };
-  return { type: tool, c, w, dpr, fill: st.fill, fc: st.fc, dn: st.dn, see, l: p[0], t: p[1], r: p[0], b: p[1] };
+  return { type: tool, c, w, dpr, fill: st.fill, fc: st.fc, dn: st.dn, see, op, l: p[0], t: p[1], r: p[0], b: p[1] };
 }
 const atInk = ev => { const [x, y] = at(ev); return [x + off.x, y + off.y]; };
 
@@ -557,7 +565,7 @@ function polyClick(e) {
   if (poly == null) {
     const st = styleOf('poly');
     cur = null;
-    poly = shapes.push({ type: 'poly', c: st.c, w: st.w * dpr, dpr, fill: st.fill, fc: st.fc, dn: st.dn, see: st.see || undefined, pts: [p, p], open: true }) - 1;
+    poly = shapes.push({ type: 'poly', c: st.c, w: st.w * dpr, dpr, fill: st.fill, fc: st.fc, dn: st.dn, see: st.see || undefined, op: st.see && st.op, pts: [p, p], open: true }) - 1;
   } else {
     const s = shapes[poly], pts = s.pts.slice(0, -1), q = e.shiftKey ? snap(pts.at(-1), p) : p;
     // The second press of a double-click lands on the point the first one added.

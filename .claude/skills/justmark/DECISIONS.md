@@ -99,6 +99,10 @@
 - **2026-10-13 — Dock compacted** (handsoff): with color targets, Fill's split button and See-through, a rect's dock
   reached 685 CSS px and crowded the zoom pill at the 960 px minimum width. Swatches went 30 → 26 px and the dock's
   group gap 14 → 10 px: a rect's dock is 609 px, a callout's 651 px at 960 wide, no overlap.
+- **2026-10-13 — After the user's first try** (user): the density slider didn't move (the dock blocks mousedown to keep an
+  open text focused, which also blocked dragging a slider; sliders are exempt now). See-through becomes a split button
+  with an Opacity slider (10–90%, default 40%), like Fill's density (user). The weight's icon was unclear; it is now a
+  live preview of the line (user: "pen icon or some other way"; a preview shows the size directly).
 - **2026-10-13 — Right-click verb as built** (handsoff, spec silent): when the setting is off, startup removes the verb
   (so a stale one from a moved exe can't linger); the verb gets the exe's icon (`Icon` value); written with the
   `winreg` crate (already in the tree via auto-launch). No SHChangeNotify: Explorer reads classic verbs live.

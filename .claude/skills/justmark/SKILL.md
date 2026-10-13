@@ -118,7 +118,8 @@ So mouse-up → editor visible ≈ 0.6–0.8 s. Regressions past ~1 s or idle pa
 - **Weight − value +** (built) replaces Thin/Medium/Thick: 1–16 screen px, step 1, default 4, for every tool
   with a weight (highlighter keeps its 4× drawn width; callout border). Holding − or + repeats: one step,
   then after 400 ms ~12 steps/s until release or the pointer leaves. Text size's −/+ repeat the same way.
-  A held run on a selected shape is one undo step.
+  A held run on a selected shape is one undo step. Left of −, a preview of the line itself shows the weight: the
+  line's color, its screen thickness (the highlighter's 4×), up to 16 px.
 - **Callout tail stays drawn while its text is being typed** (built): the box and tail follow the editor live.
 - **Polygon (G)** (built): click adds a point; double-click, Enter or clicking the first point closes; Backspace
   drops the last point; Esc cancels the polygon in progress. Shift snaps the next edge to 45°. Weight,
@@ -128,8 +129,10 @@ So mouse-up → editor visible ≈ 0.6–0.8 s. Regressions past ~1 s or idle pa
   pattern's spacing. Patterns (SVG `<pattern>` in the fill color): `///`, `\\\`, `|||`, `===`, `###`
   grid, `×××` diagonal crosshatch, halftone light/medium/heavy (~15/35/60% dot coverage, by dot size),
   herringbone, running bond brick, checkerboard. The user will prune what proves useless.
-- **See-through toggle** (built; pen, line, arrow, rect, ellipse, cloud, polygon; not text/callout): the whole
-  shape at 40% opacity, as a group so a stroke over its own fill doesn't double. Same as the highlighter.
+- **See-through = split button** (built; pen, line, arrow, rect, ellipse, cloud, polygon; not text/callout): click
+  toggles it; ▾ opens an Opacity slider, 10–90% in 10% steps, default 40% (the highlighter's). Moving the slider
+  turns See-through on. The whole shape is drawn at that opacity, as a group so a stroke over its own fill
+  doesn't double. Opacity is part of the tool's style. A drag on either slider (opacity, density) is one undo step.
 - **Covering, not redaction:** every export is flattened, so any opaque markup covers what's under it
   for good. See-through shapes and patterns don't. Fill's tooltip says "covers what's under it in every
   export" instead of naming black boxes.

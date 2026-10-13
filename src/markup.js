@@ -1,6 +1,6 @@
 // Markup shapes, in pixels of the uncropped capture. One SVG serves the screen overlay and the export, so they match.
 // { type: 'pen'|'hl'|'line'|'arrow', c, w, pts: [[x, y], ...] }
-// Any but text, callout and hl may have see: true, drawn whole at 40% (like the highlighter): it covers nothing.
+// Any but text, callout and hl may have see: true, drawn whole at opacity op (missing: 40%, like the highlighter): it covers nothing.
 // { type: 'rect'|'ellipse'|'cloud', c, w, fill, fc, dn, l, t, r, b }  fill: false, 'solid' (or true) or a PATTERNS key, in fc
 //   (missing: c); dn: pattern density
 // { type: 'poly', c, w, fill, fc, pts, open }  open: still being drawn (no fill, not closed)
@@ -151,7 +151,7 @@ const defs = (s, i, dpr) => PATTERNS[s.fill] ? `<defs>${pattern('jm' + i, s.fill
 // v: the part of the uncropped capture showing, { x, y, w, h }. pad > 0 adds invisible, wider copies so thin shapes are easy to click.
 export const toSvg = (shapes, v, pad = 0, dpr = 1) =>
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${v.x} ${v.y} ${v.w} ${v.h}" width="${v.w}" height="${v.h}">` +
-  shapes.map((s, i) => `<g data-i="${i}">${defs(s, i, dpr)}${s.see ? `<g opacity="0.4">${draw(s, 0, dpr, i)}</g>` : draw(s, 0, dpr, i)}${pad ? `<g opacity="0">${draw(s, pad, dpr, i)}</g>` : ''}</g>`).join('') + '</svg>';
+  shapes.map((s, i) => `<g data-i="${i}">${defs(s, i, dpr)}${s.see ? `<g opacity="${s.op || 0.4}">${draw(s, 0, dpr, i)}</g>` : draw(s, 0, dpr, i)}${pad ? `<g opacity="0">${draw(s, pad, dpr, i)}</g>` : ''}</g>`).join('') + '</svg>';
 
 // The shape with new text (em: its widest line per unit of size). A callout left of or above its point keeps the edge facing
 // the point, so new text grows away from it rather than over it. It stops at the image's left/top edge (or where it already

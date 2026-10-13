@@ -90,6 +90,12 @@
   @starting-style { #savemenu:popover-open { opacity: 0; translate: 0 -6px; } }
   .split { anchor-name: --save; }
   .fsplit { anchor-name: --fill; }
+  .ssplit { anchor-name: --see; }
+  #seemenu { inset: auto; margin: 0 0 8px; position-area: top; position-anchor: --see; width: 200px;
+    padding: 10px; border: 1px solid var(--line); border-radius: 12px; color: var(--text); background: var(--solid); box-shadow: var(--shadow); }
+  #seemenu .field { margin: 0; }
+  #seemenu .field > span { display: flex; justify-content: space-between; }
+  #opacity { width: 100%; accent-color: var(--accent); }
   .fsplit > button { height: 34px; }
   #fillmenu {
     inset: auto; margin: 0 0 8px; position-area: top; position-anchor: --fill; overflow: visible;
@@ -144,7 +150,8 @@
     box-shadow: inset 0 0 0 1px light-dark(#0000002e, #ffffff40); transition: box-shadow .15s, scale .15s var(--ease);
   }
   [data-c][aria-pressed=true]::before { box-shadow: inset 0 0 0 1px #0003, 0 0 0 2px var(--solid), 0 0 0 4px var(--accent); scale: .9; }
-  .wline { display: block; width: 14px; height: 3px; border-radius: 2px; background: currentColor; }
+  .wbox { display: flex; align-items: center; justify-content: center; width: 22px; height: 18px; }
+  #wprev { display: block; width: 20px; border-radius: 9px; box-shadow: 0 0 0 1px light-dark(#0000002e, #ffffff40); }
   /* None: a struck-through empty swatch */
   .none { --c: transparent; }
   [data-c].none::before, .targets .none i { background: linear-gradient(to top right, transparent calc(50% - 1px), var(--danger) calc(50% - 1px) calc(50% + 1px), transparent calc(50% + 1px)); }
@@ -305,7 +312,7 @@
       <button data-c="none" id="nonec" class="none tip-up" aria-label="None" data-tip=""></button>
     </div>
     <div class="g g-w">
-      <span class="wline" aria-hidden="true"></span>
+      <span class="wbox" aria-label="Line weight" data-tip="" role="img" class="tip-up"><i id="wprev"></i></span>
       <button data-step="w" data-d="-1" aria-label="Thinner" data-tip="&#10;Hold to repeat" class="tip-up"><svg class="i"><use href="#i-minus"/></svg></button>
       <span id="wval" aria-label="Weight"></span>
       <button data-step="w" data-d="1" aria-label="Thicker" data-tip="&#10;Hold to repeat" class="tip-up"><svg class="i"><use href="#i-plus"/></svg></button>
@@ -321,7 +328,13 @@
       </div>
     </div>
     <div class="g g-o">
-      <button data-see aria-label="See-through" data-tip="&#10;40% opacity: shows what's under it, covers nothing" class="tip-up"><svg class="i"><use href="#i-see"/></svg></button>
+      <div class="split fsplit ssplit">
+        <button data-see aria-label="See-through" data-tip="&#10;Shows what's under it, covers nothing" class="tip-up"><svg class="i"><use href="#i-see"/></svg></button>
+        <button popovertarget="seemenu" aria-label="Opacity" data-tip="" class="tip-up"><svg class="i"><use href="#i-down"/></svg></button>
+      </div>
+      <div id="seemenu" popover>
+        <label class="field"><span>Opacity <b id="opval"></b></span><input type="range" id="opacity" min="10" max="90" step="10"></label>
+      </div>
     </div>
     <div class="g g-s">
       <button data-step="size" data-d="-1" aria-label="Smaller text" data-tip="&#10;Hold to repeat" class="tip-up aa" style="font-size:11px">A</button>
