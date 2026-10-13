@@ -530,3 +530,10 @@ for (const a of JSON.parse((await import('node:fs')).readFileSync('./src-tauri/t
   assert.strictEqual(clearScroll(100, 140, 60, 520), 0);
   assert.strictEqual(clearScroll(60, 600, 60, 520), 0); // taller than the gap: keep the top visible
 }
+// editor-r4-3: below ~700px the dock + zoom pill overflow #bottom's one row; a narrow-width rule must stack them.
+{
+  const css = (await import('node:fs')).readFileSync('./src/index.html', 'utf8');
+  const mq = css.match(/@media \(max-width: (\d+)px\) \{([^@]*?#bottom[^@]*?)\n  \}/);
+  assert(mq && +mq[1] >= 720, 'narrow-width rule for #bottom');
+  assert.match(mq[2], /#zoombar \{[^}]*grid-row: 1/);
+}

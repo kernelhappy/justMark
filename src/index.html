@@ -119,6 +119,12 @@
   body:has(#stage.cropping) #props .g-crop { display: flex; gap: 6px; }
   .hint { padding: 0 6px 0 4px; color: var(--muted); }
   #zoombar { grid-column: 3; justify-self: end; }
+  /* Too narrow for dock + zoom on one row (~700px with a rect selected): stack zoom above the dock. */
+  @media (max-width: 760px) {
+    #bottom { grid-template-columns: 1fr; }
+    #props { grid-column: 1; grid-row: 2; justify-self: center; }
+    #zoombar { grid-column: 1; grid-row: 1; }
+  }
   #zoom { min-width: 52px; font-variant-numeric: tabular-nums; font-weight: 600; }
   [data-c] { min-width: 30px; width: 30px; padding: 0; }
   [data-c]::before {
