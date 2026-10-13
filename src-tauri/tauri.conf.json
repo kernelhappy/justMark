@@ -13,6 +13,6 @@
     "active": true,
     "targets": ["nsis"],
     "icon": ["icons/icon.ico"],
-    "fileAssociations": [{ "ext": ["png", "jpg", "jpeg"], "name": "Image", "role": "Editor" }]
+    "fileAssociations": [{ "ext": ["png", "jpg", "jpeg"], "name": "snarkymark.Image", "role": "Editor" }]
   }
 }

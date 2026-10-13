@@ -7,7 +7,9 @@ export const LH = 1.25, PAD = 0.4; // line height and callout padding, in font s
 const NO = { l: -Infinity, t: -Infinity, r: Infinity, b: Infinity };
 const f = v => Math.round(v * 10) / 10;
 // Tabs become the one space canvas measures them as; characters XML can't hold (pasted \f, NUL, U+FFFF...) are dropped, or the export won't decode.
-const esc = s => s.replace(/\t/g, ' ').replace(/[^\n\r -\uD7FF\uE000-\uFFFD\u{10000}-\u{10ffff}]/gu, '').replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`);
+// finishEdit stores text already clean, so its measured width matches what's drawn.
+export const clean = s => s.replace(/[^\t\n\r -\uD7FF\uE000-\uFFFD\u{10000}-\u{10ffff}]/gu, '');
+const esc = s => clean(s).replace(/\t/g, ' ').replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`);
 const rectD = ({ l, t, r, b }) => `M${f(l)} ${f(t)}H${f(r)}V${f(b)}H${f(l)}Z`;
 const path = pts => 'M' + (pts.length > 1 ? pts : [pts[0], pts[0]]).map(([x, y]) => `${f(x)} ${f(y)}`).join('L');
 
@@ -41,6 +43,9 @@ export function snap([x0, y0], [x, y]) {
 // Text sizes, in screen pixels, that the size buttons step through from any size.
 const SIZES = [8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 40, 48, 64, 80, 96];
 export const nextSize = (px, dir) => (dir > 0 ? SIZES.find(v => v > px + 0.5) : SIZES.findLast(v => v < px - 0.5)) ?? px;
+
+// WebView2's reload keys (F5, Ctrl+R) would silently wipe unsaved markup.
+export const isReload = e => e.key === 'F5' || e.key === 'BrowserRefresh' || ((e.ctrlKey || e.metaKey) && (/^[a-z]$/i.test(e.key) ? e.key.toLowerCase() === 'r' : e.code === 'KeyR')); // same letter-or-physical rule as the shortcuts
 
 // Two-point shapes drag their ends, text scales from its corners, the rest resize by edges and corners.
 export const handles = s => s.pts?.length === 2 ? ['0', '1'] : s.size ? ['nw', 'ne', 'se', 'sw', ...(s.tip ? ['tip'] : [])] : ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
@@ -118,3 +123,17 @@ function draw(s, pad = 0, dpr = 1) {
 export const toSvg = (shapes, v, pad = 0, dpr = 1) =>
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${v.x} ${v.y} ${v.w} ${v.h}" width="${v.w}" height="${v.h}">` +
   shapes.map((s, i) => `<g data-i="${i}">${draw(s, 0, dpr)}${pad ? `<g opacity="0">${draw(s, pad, dpr)}</g>` : ''}</g>`).join('') + '</svg>';
+
+// Where the text editing box sits, as % of the image, capped so it never grows past the image edge (the committed text is clipped there).
+// A callout left of or above its point grows away from it while typing, as finishEdit will place it.
+export function editBox(s, b, off, W, H, p) {
+  const l = s.x + p - off.x, t = s.y + p - off.y, pc = v => v / W * 100 + '%', pv = v => v / H * 100 + '%';
+  const e = { left: pc(l), top: pv(t), right: '', bottom: '', maxWidth: pc(W - l), maxHeight: pv(H - t) };
+  if (s.tip && b.l + b.r < 2 * s.tip[0]) Object.assign(e, { left: '', right: pc(off.x + W - b.r + p), maxWidth: pc(b.r - p - off.x) });
+  if (s.tip && b.t + b.b < 2 * s.tip[1]) Object.assign(e, { top: '', bottom: pv(off.y + H - b.b + p), maxHeight: pv(b.b - p - off.y) });
+  return e;
+}
+// Scroll needed to bring a box (viewport top/bottom) clear of the fixed header (above `hi`) and bottom dock (below `lo`); the top wins.
+export const clearScroll = (top, bottom, hi, lo) => top < hi ? top - hi : Math.max(0, Math.min(bottom - lo, top - hi));
+// Top of a new text centered on a click, kept inside the image (above `top` it would be clipped).
+export const newTextY = (y, size, top) => Math.max(top, y - size * LH / 2);

@@ -23,7 +23,7 @@ when changing anything structural (see Budgets).
   center it there and show it.
 - **Open with / second launch**: argv files go to the running instance (single-instance plugin) and open
   like a snip. The NSIS bundle registers png/jpg/jpeg as "Editor" associations.
-- **Tray**: "Start at login" (HKCU Run entry via autostart plugin, off by default) and "Quit". Closing the
+- **Tray**: "Start at login" (HKCU Run entry, quoted exe path, via the `auto-launch` crate in CurrentUser mode; off by default) and "Quit". Closing the
   last window never exits the process; only Quit does.
 
 ## Architecture
@@ -35,9 +35,10 @@ when changing anything structural (see Budgets).
   (pre-loaded hidden window, ~100 MB idle, near-instant) is the fallback if B feels laggy.
 - **Rust ↔ page contract** (app commands; no capabilities file needed):
   - `shot` (async) → raw bytes of this window's image (`Shots` map: window label → path). Waits for the
-    PNG `IEND` / JPEG `FFD9` end marker first, so the window starts loading while Snipping Tool is
+    PNG `IEND` / JPEG `FFD9` end marker first (watcher-created files only; Open with reads at once), so the window starts loading while Snipping Tool is
     still writing.
-  - `ready(width, height)` → size/position/show (CSS px in).
+  - `ready(img, chrome, min)` → size/position/show. `img` = capture in image px; `chrome`, `min` in CSS px
+    (Rust scales them by the target monitor's scale, not the hidden window's).
   - `save` → body = encoded bytes, header `ext` ∈ png|jpg|pdf. Rust shows the Windows Save dialog
     (`rfd`, parented to the editor), suggests `<image stem>.<ext>`, writes `<name>.part` then renames.
     Returns the file name or null on cancel.

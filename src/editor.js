@@ -1,5 +1,5 @@
 import { canvasToPdf } from './pdf.js';
-import { toSvg, bounds, handles, move, resize, dragEdges, snap, nextSize, LH, PAD } from './markup.js';
+import { toSvg, bounds, handles, move, resize, dragEdges, snap, nextSize, clean, isReload, editBox, LH, PAD, clearScroll, newTextY } from './markup.js';
 
 const $ = id => document.getElementById(id);
 
@@ -42,6 +42,8 @@ async function encode(fmt) {
   if (fmt === 'png' && !sh.length) return png0;
   const quality = +opts.quality.value;
   const img = await createImageBitmap(png0), c = new OffscreenCanvas(img.width, img.height), ctx = c.getContext('2d', { willReadFrequently: true });
+  // JPG and PDF (JPEG pages) have no alpha: flatten a transparent PNG onto white, or its clear areas encode as black.
+  if (fmt !== 'png') { ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, img.width, img.height); }
   ctx.drawImage(img, 0, 0);
   if (sh.length) {
     const ink = new Image(), url = URL.createObjectURL(new Blob([toSvg(sh, { ...o, w: img.width, h: img.height }, 0, dpr)], { type: 'image/svg+xml' }));
@@ -69,6 +71,8 @@ const ACTIONS = {
     const url = URL.createObjectURL(await encode('png')), p = $('printshot');
     p.src = url;
     await p.decode();
+    // Size from this image, not body's --actual: a crop can swap #shot (and --actual) while the encode runs.
+    p.style.setProperty('--actual', p.naturalWidth / devicePixelRatio + 'px');
     document.body.classList.add('burned');
     // print() blocks until the dialog closes, and returns at once when blocked by policy or throttled (no afterprint),
     // so clean up on return: a lingering .burned would make a later menu Print use this stale image.
@@ -83,11 +87,16 @@ const state = () => hist[step] + JSON.stringify(off);
 let saved = '[]{"x":0,"y":0}';
 const closeEditor = () => (state() === saved || confirm('Close without saving or copying your markup?')) && invoke('close');
 
-// One action at a time: a second Save would open a second dialog, and encodes are heavy.
-let busy = false;
+// One action at a time: a second Save would open a second dialog, and encodes are heavy. A press while one runs waits
+// its turn (the latest wins), so a second Copy exports what's on screen then instead of being dropped (filled boxes redact).
+let busy = false, next = null;
 async function run(key) {
   const act = ACTIONS[key];
-  if (!act || !png || busy) return;
+  if (!act || !png) return;
+  // The pending crop box isn't in png yet: exporting now would ship the area being cut away (Ctrl+P lands here too).
+  if (cropping()) { $('status').textContent = 'Apply or cancel the crop first'; return; }
+  finishEdit(); // toolbar presses keep an open text focused, so its typed text isn't in shapes yet
+  if (busy) { next = key; return; }
   busy = true;
   $('status').textContent = 'Working…';
   try {
@@ -99,6 +108,7 @@ async function run(key) {
   } finally {
     busy = false;
   }
+  if (next) { const k = next; next = null; return run(k); }
 }
 document.onclick = ({ target }) => run(target.dataset.act);
 
@@ -106,7 +116,8 @@ document.onclick = ({ target }) => run(target.dataset.act);
 // The fit modes never enlarge past actual size.
 const shot = $('shot'), header = document.querySelector('header');
 // The header is fixed, not sticky, so it stays put when a zoomed-in capture scrolls sideways; pad the page by its height.
-new ResizeObserver(() => { document.body.style.paddingTop = header.offsetHeight + 'px'; applyZoom(); }).observe(header); // status text or the Quality select can wrap it
+// Height only: its width follows the page's vertical scrollbar, which Fit width can toggle, and re-fitting on that would flip forever.
+let headH; new ResizeObserver(() => { if (header.offsetHeight === headH) return; document.body.style.paddingTop = (headH = header.offsetHeight) + 'px'; applyZoom(); }).observe(header); // status text or the Quality select can wrap it
 let zoom = 'fit', scale = 1;
 function applyZoom() {
   const w = shot.naturalWidth / devicePixelRatio, h = shot.naturalHeight / devicePixelRatio;
@@ -118,20 +129,25 @@ function applyZoom() {
   document.body.style.setProperty('--actual', w + 'px'); // print at Actual size, not one CSS px per image pixel
   // Fit can drop the old layout's vertical scrollbar, which fires no resize: measure again without it (only on widening, so it can't loop).
   if (zoom === 'fit' && document.documentElement.clientWidth > cw) return applyZoom();
+  // Fit width can add a vertical scrollbar: measure again with it so the capture doesn't overflow (only on narrowing, so it can't loop).
+  if (zoom === 'width' && document.documentElement.clientWidth < cw) return applyZoom();
   $('zoom').textContent = Math.round(scale * 100) + '%';
   render();
 }
 // While a crop or Undo crop swaps the image, gestures wait: until it loads, the old image's geometry would meet the new offset.
 let swapping = false, shown = false;
-// The window starts hidden; Rust sizes it to what the page asks for (CSS px, capped to the screen) and shows it.
+// The window starts hidden; Rust sizes it to what the page asks for (capped to the screen) and shows it.
+// The capture goes in image px, not over devicePixelRatio: that is the scale where the hidden window was made, maybe not
+// the monitor it opens on. Chrome and minimum are CSS px, which Rust scales for that monitor.
 // 960 wide keeps the top bar on one row and the style dock clear of the zoom pill; 104/120 is the room the dock takes below.
-const show = (w, h) => shown || (shown = true, invoke('ready', { width: Math.max(960, w + 48), height: Math.max(480, header.offsetHeight + h + 120) }));
+const show = (w, h) => shown || (shown = true, invoke('ready', { img: [w, h], chrome: [48, header.offsetHeight + 120], min: [960, 480] }));
 shot.onload = () => {
   swapping = false;
   applyZoom();
-  show(shot.naturalWidth / devicePixelRatio, shot.naturalHeight / devicePixelRatio); // the capture at actual size, plus the chrome
+  show(shot.naturalWidth, shot.naturalHeight); // the capture at actual size, plus the chrome
 };
-shot.onerror = () => { $('status').textContent ||= "Can't open this image."; show(0, 0); };
+// A PNG that passed the magic check but won't decode: disable everything as for a failed load, or Save writes the broken bytes.
+shot.onerror = () => { swapping = false; $('status').textContent ||= "Can't open this image."; png = null; for (const el of document.querySelectorAll('button, input')) el.disabled = true; show(0, 0); };
 if (!png) show(0, 0);
 onresize = () => { syncDpr(); applyZoom(); };
 // A move to a monitor with another scale factor can keep the CSS size and fire no resize; a resolution query still flips.
@@ -197,8 +213,10 @@ async function applyCrop() {
     const blob = await c.convertToBlob({ type: 'image/png' });
     if (png !== src) return; // Undo crop landed meanwhile; applying now would make original a cropped image
     original ??= src;
-    off = { x: o.x + x, y: o.y + y };
+    off = { x: o.x + x, y: o.y + y, w, h }; // w, h: only so state() sees a crop that keeps the top-left corner
     setShot(blob);
+  } catch (e) {
+    $('status').textContent = 'Crop failed: ' + (e.message ?? e);
   } finally {
     if (png === src) swapping = false; // failed: no new image is coming
   }
@@ -269,9 +287,9 @@ function render() {
     }
   }
   if (editing != null) {
-    const s = shapes[editing], k = shot.clientWidth / W, p = s.tip ? PAD * s.size : 0;
+    const s = shapes[editing], k = shot.clientWidth / W, p = s.tip ? PAD * s.size : 0, H = shot.naturalHeight, b = bounds(s);
     ink.querySelector(`[data-i="${editing}"]`).style.visibility = 'hidden';
-    Object.assign(edit.style, { left: (s.x + p - off.x) / W * 100 + '%', top: (s.y + p - off.y) / shot.naturalHeight * 100 + '%', font: `600 ${s.size * k}px/${LH} system-ui, sans-serif`, color: s.tip ? '#111' : s.c, background: s.tip || !['#ffffff', '#fdd835'].includes(s.c) ? '' : '#000c' });
+    Object.assign(edit.style, editBox(s, b, off, W, H, p), { font: `600 ${s.size * k}px/${LH} system-ui, sans-serif`, color: s.tip ? '#111' : s.c, background: s.tip || !['#ffffff', '#fdd835'].includes(s.c) ? '' : '#000c' });
   }
   const now = s ?? styleOf(tool);
   for (const b of document.querySelectorAll('[data-tool], [data-c], [data-w], [data-fill], [data-cmd]')) {
@@ -307,15 +325,19 @@ function remove() {
 // No browser menu (Back, Reload, Save as…); the text editor keeps its cut/copy/paste menu.
 oncontextmenu = e => e.target === edit || e.preventDefault();
 // A press must not blur an open text editor: finishEdit would delete an empty new text before the click lands.
-$('tools').onmousedown = $('props').onmousedown = e => e.preventDefault();
+$('tools').onmousedown = $('props').onmousedown = $('zoombar').onmousedown = $('savemenu').onmousedown = $('status').onmousedown = e => e.preventDefault();
 $('tools').onclick = $('props').onclick = ({ target }) => {
   if (gesture) return;
   const d = target.closest('button')?.dataset ?? {}, s = shapes[cur];
   // Tool, Undo, Redo and Delete end an open edit first; on an empty new text that just cancels it, so Undo doesn't also undo the last commit.
   if (editing != null && (d.tool || d.cmd)) {
     const empty = !edit.value.trimEnd();
-    finishEdit();
-    if (empty && d.cmd) return render();
+    // An existing text cleared to empty: drop the edit uncommitted, so the command acts on the saved history.
+    if (empty && d.cmd && shapes[editing].text) { editing = null; edit.hidden = true; }
+    else {
+      finishEdit();
+      if (empty && d.cmd) return render();
+    }
   }
   if (d.tool) {
     if (cropping()) endCrop();
@@ -343,14 +365,15 @@ function startEdit(i) {
   edit.hidden = false;
   render();
   edit.focus();
-  // focus() won't scroll an editor that is in the viewport but under the fixed header.
-  const under = header.offsetHeight - edit.getBoundingClientRect().top;
-  if (under > 0) scrollBy(0, -under);
+  // focus() won't scroll an editor that is in the viewport but under the fixed header or bottom dock.
+  const r = edit.getBoundingClientRect(), dock = $('props').getBoundingClientRect();
+  const dy = clearScroll(r.top, r.bottom, header.offsetHeight, dock.height ? dock.top : innerHeight);
+  if (dy) scrollBy(0, dy);
 }
 // Click away or Esc keeps the text; emptied text removes its shape.
 function finishEdit() {
   if (editing == null) return;
-  const i = editing, text = edit.value.trimEnd();
+  const i = editing, text = clean(edit.value).trimEnd();
   editing = null;
   edit.hidden = true;
   const was = shapes[i];
@@ -358,8 +381,9 @@ function finishEdit() {
   if (text && was.tip) {
     // A callout left of or above its point keeps the edge facing the point, so new text grows away from it rather than over it.
     const a = bounds(was), b = bounds(shapes[i]);
-    if (a.l + a.r < 2 * was.tip[0]) shapes[i].x += a.r - b.r;
-    if (a.t + a.b < 2 * was.tip[1]) shapes[i].y += a.b - b.b;
+    // It stops at the image's left/top edge (or where it already was), or the overlay and exports clip the text.
+    if (a.l + a.r < 2 * was.tip[0]) shapes[i].x = Math.max(Math.min(off.x, was.x), was.x + a.r - b.r);
+    if (a.t + a.b < 2 * was.tip[1]) shapes[i].y = Math.max(Math.min(off.y, was.y), was.y + a.b - b.b);
   } else if (!text) {
     shapes.splice(i, 1);
     cur = null;
@@ -406,7 +430,8 @@ function markDown(e) {
       return;
     }
     const from = shapes[i = cur];
-    upd = (ev, dx, dy) => move(from, dx, dy);
+    let moving = false; // a click with hand jitter is not a move
+    upd = (ev, dx, dy) => (moving ||= Math.abs(dx) >= 3 * k || Math.abs(dy) >= 3 * k) ? move(from, dx, dy) : from;
   } else if (tool === 'text') {
     stage.onpointermove = null;
     // On release, so the press's own focus handling can't blur the new editor.
@@ -414,7 +439,7 @@ function markDown(e) {
       stage.onpointerup = null;
       if (hit && shapes[hi].size) return startEdit(hi);
       const { c, size } = styleOf(tool);
-      startEdit(shapes.push({ type: 'text', c, size, x: p0[0], y: p0[1] - size * LH / 2, text: '', em: 0 }) - 1);
+      startEdit(shapes.push({ type: 'text', c, size, x: p0[0], y: newTextY(p0[1], size, off.y), text: '', em: 0 }) - 1);
     };
     return;
   } else {
@@ -460,6 +485,8 @@ function markDown(e) {
 // Losing the capture (release, pointercancel) ends the gesture as a release would, so hover can't keep drawing.
 stage.onpointerdown = e => {
   if (gesture || swapping || e.button || e.target === edit) return;
+  const menu = document.querySelector(':popover-open'); // the press would draw under the Save menu: light dismiss doesn't fire on the stage
+  if (menu) return menu.hidePopover();
   if (editing != null) return finishEdit();
   e.preventDefault(); // which also keeps focus where it was, so drop it from the toolbar: a focus ring there looks like the active tool
   document.activeElement.blur();
@@ -473,13 +500,20 @@ stage.onpointercancel = stage.onlostpointercapture = e => {
   gesture = false;
 };
 onkeydown = e => {
-  // Chrome's print shortcut follows the letter on Latin layouts (Dvorak too) and the physical P key on others.
-  if ((e.ctrlKey || e.metaKey) && (/^[a-z]$/i.test(e.key) ? e.key.toLowerCase() === 'p' : e.code === 'KeyP')) {
+  // Shortcuts follow the letter on Latin layouts (Dvorak too) and the physical key on others, like Chrome's print.
+  const k = /^[a-z]$/i.test(e.key) ? e.key.toLowerCase() : /^Key[A-Z]$/.test(e.code) ? e.code[3].toLowerCase() : e.key.toLowerCase();
+  if ((e.ctrlKey || e.metaKey) && k === 'p') {
     e.preventDefault();
     finishEdit();
-    return run('print');
+    return e.repeat || run('print');
   }
+  if ((e.ctrlKey || e.metaKey) && k === 's') { // before the crop/text gates, which would swallow it; run() refuses mid-crop
+    e.preventDefault();
+    return e.repeat || run('save'); // a held Ctrl+S would queue a second Save dialog
+  }
+  if (isReload(e)) return e.preventDefault();
   if (gesture) return;
+  if (e.key === 'Escape' && document.querySelector(':popover-open')) return; // the Save menu closes itself; this Esc is spent
   if (cropping()) {
     if (e.key === 'Escape') endCrop();
     if (e.key === 'Enter') { e.preventDefault(); applyCrop(); }
@@ -489,24 +523,22 @@ onkeydown = e => {
     if (e.key === 'Escape' && !e.isComposing) finishEdit();
     return;
   }
-  const k = e.key.toLowerCase();
   if ((e.ctrlKey || e.metaKey) && (k === 'z' || k === 'y')) {
     e.preventDefault();
     go(k === 'y' || e.shiftKey ? 1 : -1);
-  } else if ((e.ctrlKey || e.metaKey) && (k === 's' || k === 'c')) {
+  } else if ((e.ctrlKey || e.metaKey) && k === 'c') {
     e.preventDefault();
-    run(k === 's' ? 'save' : 'copy');
+    if (!e.repeat) run('copy');
   } else if ((e.key === 'Delete' || e.key === 'Backspace') && e.target.tagName !== 'INPUT') remove();
   else if (e.key === 'Escape') {
-    if (document.querySelector(':popover-open')) return; // the Save menu closes itself
     // Esc steps back to Select, then closes the editor (the snip is already on the clipboard).
-    if (tool === 'select' && cur == null) return closeEditor();
+    if (tool === 'select' && cur == null) return e.repeat || closeEditor(); // a held Esc steps back but doesn't also close
     cur = null;
     tool = stage.dataset.tool = 'select';
     render();
-  } else if (/^[a-z]$/i.test(e.key) && !e.ctrlKey && !e.metaKey && !e.altKey && e.target.tagName !== 'INPUT') {
+  } else if (/^[a-z]$/.test(k) && !e.ctrlKey && !e.metaKey && !e.altKey && e.target.tagName !== 'INPUT') {
     // Single-letter tool keys: the button's data-key (shown in its tooltip) is the binding.
-    document.querySelector(`[data-key="${e.key.toUpperCase()}"]`)?.click();
+    document.querySelector(`[data-key="${k.toUpperCase()}"]`)?.click();
   }
 };
 
