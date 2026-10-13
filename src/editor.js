@@ -306,15 +306,16 @@ function cropDown(e) {
 // Widths and text sizes are picked in screen pixels and stored in capture pixels: times dpr, which follows browser zoom and the monitor.
 let dpr = devicePixelRatio;
 // What the style dock offers per shape type or tool (see render).
-const KINDS = { select: '', hl: 'c w', pen: 'c w', line: 'c w', arrow: 'c w', rect: 'c w f', ellipse: 'c w f', cloud: 'c w f', poly: 'c w f', text: 'c s', callout: 'c w s' };
+const KINDS = { select: '', hl: 'c w', pen: 'c w o', line: 'c w o', arrow: 'c w o', rect: 'c w f o', ellipse: 'c w f o', cloud: 'c w f o', poly: 'c w f o', text: 'c s', callout: 'c w s' };
 let shapes = [], hist = ['[[],null]'], step = 0, off = { x: 0, y: 0 }, tool = 'select', cur = null, editing = null, lastDown = 0, gesture = false;
 // Each tool's style, in screen pixels, for its next shape. Kept in localStorage (shared by every editor window, like Save's
 // format), one key per tool so two windows restyling different tools don't overwrite each other.
 const RED = '#e53935', STYLES = {
-  hl: { c: '#fdd835', w: 4 }, pen: { c: RED, w: 4 }, line: { c: RED, w: 4 }, arrow: { c: RED, w: 4 },
+  // see: see-through (40%, covers nothing).
+  hl: { c: '#fdd835', w: 4 }, pen: { c: RED, w: 4, see: false }, line: { c: RED, w: 4, see: false }, arrow: { c: RED, w: 4, see: false },
   // fill: false or what it is (see FILLS); last: what Fill's button turns on; dn: pattern density.
-  rect: { c: RED, w: 4, fill: false, last: 'solid', dn: 1 }, ellipse: { c: RED, w: 4, fill: false, last: 'solid', dn: 1 },
-  cloud: { c: RED, w: 4, fill: false, last: 'solid', dn: 1 }, poly: { c: RED, w: 4, fill: false, last: 'solid', dn: 1 },
+  rect: { c: RED, w: 4, fill: false, last: 'solid', dn: 1, see: false }, ellipse: { c: RED, w: 4, fill: false, last: 'solid', dn: 1, see: false },
+  cloud: { c: RED, w: 4, fill: false, last: 'solid', dn: 1, see: false }, poly: { c: RED, w: 4, fill: false, last: 'solid', dn: 1, see: false },
   text: { c: RED, size: 20, fc: null }, callout: { c: RED, w: 4, size: 20, fc: '#fff', tc: '#111' },
 };
 function styleOf(t) {
@@ -372,10 +373,10 @@ function render() {
     }
   }
   const now = styleNow(s), t = s?.type ?? tool, key = keyOf(t), tg = TARGETS[t] ?? {}, color = colorOf(now, t, key);
-  for (const b of document.querySelectorAll('[data-tool], [data-c], [data-fill], [data-cmd]')) {
+  for (const b of document.querySelectorAll('[data-tool], [data-c], [data-fill], [data-see], [data-cmd]')) {
     const d = b.dataset;
     if (d.cmd) b.disabled = d.cmd === 'undo' ? !step : d.cmd === 'redo' ? step === hist.length - 1 : !s;
-    else b.setAttribute('aria-pressed', d.tool ? d.tool === tool : d.c ? (d.c === 'none' ? null : d.c) === color : !!now.fill);
+    else b.setAttribute('aria-pressed', d.tool ? d.tool === tool : d.c ? (d.c === 'none' ? null : d.c) === color : 'see' in d ? !!now.see : !!now.fill);
   }
   // The target picker shows each target's color; the none swatch is only for a fill.
   $('targets').hidden = !TARGETS[t];
@@ -460,7 +461,7 @@ $('tools').onclick = $('props').onclick = ({ target, detail }) => {
     // Fill's button turns the last fill on and off; its menu picks one (and makes it the last).
     const t = s?.type ?? tool, now = styleNow(s), on = now.fill || styleOf(t).last || 'solid';
     const ch = d.c ? swatch(t, keyOf(t), d.c === 'none' ? null : d.c, on) : 'fill' in d ? { fill: now.fill ? false : on }
-      : d.fk ? (d.fk === 'none' ? { fill: false } : { fill: d.fk, last: d.fk }) : null;
+      : d.fk ? (d.fk === 'none' ? { fill: false } : { fill: d.fk, last: d.fk }) : 'see' in d ? { see: !now.see } : null;
     if (!ch) return;
     return restyle(ch);
   }
@@ -535,13 +536,14 @@ edit.oninput = () => (shapes[editing]?.tip || shapes[editing]?.fc) && render(); 
 addEventListener('beforeprint', finishEdit);
 
 function newShape(p) {
-  const st = styleOf(tool), c = st.c, w = st.w * dpr, size = st.size * dpr;
-  if (tool === 'pen' || tool === 'hl') return { type: tool, c, w, pts: [p] };
-  if (tool === 'line') return { type: tool, c, w, pts: [p, p] };
+  const st = styleOf(tool), c = st.c, w = st.w * dpr, size = st.size * dpr, see = st.see || undefined;
+  if (tool === 'hl') return { type: tool, c, w, pts: [p] };
+  if (tool === 'pen') return { type: tool, c, w, see, pts: [p] };
+  if (tool === 'line') return { type: tool, c, w, see, pts: [p, p] };
   // dpr: arrowheads, callout pointers and cloud scallops keep the minimum size they had when drawn
-  if (tool === 'arrow') return { type: tool, c, w, dpr, pts: [p, p] };
+  if (tool === 'arrow') return { type: tool, c, w, dpr, see, pts: [p, p] };
   if (tool === 'callout') return { type: tool, c, w, dpr, size, fc: st.fc, tc: st.tc, x: p[0], y: p[1], text: '', em: 0, tip: p };
-  return { type: tool, c, w, dpr, fill: st.fill, fc: st.fc, dn: st.dn, l: p[0], t: p[1], r: p[0], b: p[1] };
+  return { type: tool, c, w, dpr, fill: st.fill, fc: st.fc, dn: st.dn, see, l: p[0], t: p[1], r: p[0], b: p[1] };
 }
 const atInk = ev => { const [x, y] = at(ev); return [x + off.x, y + off.y]; };
 
@@ -554,7 +556,7 @@ function polyClick(e) {
   if (poly == null) {
     const st = styleOf('poly');
     cur = null;
-    poly = shapes.push({ type: 'poly', c: st.c, w: st.w * dpr, dpr, fill: st.fill, fc: st.fc, dn: st.dn, pts: [p, p], open: true }) - 1;
+    poly = shapes.push({ type: 'poly', c: st.c, w: st.w * dpr, dpr, fill: st.fill, fc: st.fc, dn: st.dn, see: st.see || undefined, pts: [p, p], open: true }) - 1;
   } else {
     const s = shapes[poly], pts = s.pts.slice(0, -1), q = e.shiftKey ? snap(pts.at(-1), p) : p;
     // The second press of a double-click lands on the point the first one added.

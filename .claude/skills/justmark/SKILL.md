@@ -126,7 +126,7 @@ So mouse-up → editor visible ≈ 0.6–0.8 s. Regressions past ~1 s or idle pa
   pattern's spacing. Patterns (SVG `<pattern>` in the fill color): `///`, `\\\`, `|||`, `===`, `###`
   grid, `×××` diagonal crosshatch, halftone light/medium/heavy (~15/35/60% dot coverage, by dot size),
   herringbone, running bond brick, checkerboard. The user will prune what proves useless.
-- **See-through toggle** (pen, line, arrow, rect, ellipse, cloud, polygon; not text/callout): the whole
+- **See-through toggle** (built; pen, line, arrow, rect, ellipse, cloud, polygon; not text/callout): the whole
   shape at 40% opacity, as a group so a stroke over its own fill doesn't double. Same as the highlighter.
 - **Covering, not redaction:** every export is flattened, so any opaque markup covers what's under it
   for good. See-through shapes and patterns don't. Fill's tooltip says "covers what's under it in every

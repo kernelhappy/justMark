@@ -740,3 +740,12 @@ for (const a of JSON.parse((await import('node:fs')).readFileSync('./src-tauri/t
   }
   assert.match(toSvg([{ ...shapes[0], fill: true, fc: undefined }], { x: 0, y: 0, w: 9, h: 9 }), /fill="red"/, 'an old boolean fill is solid');
 }
+// See-through: the whole shape at 40% as one group (a stroke over its own fill doesn't double); not on text, callout or hl.
+{
+  const shapes = [{ type: 'rect', c: 'red', w: 4, dpr: 1, fill: 'solid', l: 0, t: 0, r: 50, b: 50 }], t = toolbar({ shapes, cur: 0 });
+  t.click({ see: '' });
+  assert.deepStrictEqual([shapes[0].see, t.get().styleOf('rect').see, t.get().styleOf('ellipse').see], [true, true, false]);
+  assert.match(toSvg(shapes, { x: 0, y: 0, w: 9, h: 9 }, 8), /<g data-i="0"><g opacity="0.4"><path [^>]*fill="red"[^>]*\/><\/g><g opacity="0">/, 'not one 40% group, or the hit outline went see-through');
+  const kinds = new Function(`${SRC.match(/const KINDS = .*/)[0]} return KINDS;`)();
+  assert.deepStrictEqual(Object.keys(kinds).filter(k => kinds[k].includes('o')), ['pen', 'line', 'arrow', 'rect', 'ellipse', 'cloud', 'poly']);
+}

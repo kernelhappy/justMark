@@ -96,3 +96,6 @@
   = 8 screen px (at the shape's dpr) ÷ density; density slider 0.5–2 in 0.25 steps (higher = tighter), default 1;
   lines are 0.2 of a tile. Halftones are dots on a 45° grid. Patterns are anchored to the capture, not the shape. A
   shape's hit area stays solid under a pattern. A fill color picked on the Fill target keeps the pattern.
+- **2026-10-13 — Dock compacted** (handsoff): with color targets, Fill's split button and See-through, a rect's dock
+  reached 685 CSS px and crowded the zoom pill at the 960 px minimum width. Swatches went 30 → 26 px and the dock's
+  group gap 14 → 10 px: a rect's dock is 609 px, a callout's 651 px at 960 wide, no overlap.
