@@ -333,6 +333,8 @@ const TARGETS = { rect: { line: 'c', fill: 'fc' }, ellipse: { line: 'c', fill: '
 let colorTarget = 'line'; // the picker's pick
 // The picked target's key for a type; a type without that target gets its first.
 const keyOf = t => TARGETS[t]?.[colorTarget] ?? Object.values(TARGETS[t] ?? { line: 'c' })[0];
+// The dock's kind of a shape (else the tool): an open polyline is styled like a line. The one being drawn may still close.
+const kindOf = s => s?.open && s !== shapes[poly] ? 'line' : s?.type ?? tool;
 // The color a target shows (null: none). A fillable shape's fill is its line color until one is picked, and none while Fill is off.
 const colorOf = (s, t, key) => key !== 'fc' ? s[key] : 'fill' in STYLES[t] ? (s.fill ? s.fc ?? s.c : null) : s.fc ?? null;
 // What a swatch (null: the none swatch) changes: on a fillable shape's fill, a color also turns Fill on (`on`: the fill it
@@ -373,7 +375,7 @@ function render() {
       if (p) Object.assign(i.style, { left: `calc(${(p[0] - b.l) / (b.r - b.l || 1) * 100}% - 6px)`, top: `calc(${(p[1] - b.t) / (b.b - b.t || 1) * 100}% - 6px)` });
     }
   }
-  const now = styleNow(s), t = s?.type ?? tool, key = keyOf(t), tg = TARGETS[t] ?? {}, color = colorOf(now, t, key);
+  const now = styleNow(s), t = kindOf(s), key = keyOf(t), tg = TARGETS[t] ?? {}, color = colorOf(now, t, key);
   for (const b of document.querySelectorAll('[data-tool], [data-c], [data-fill], [data-see], [data-cmd]')) {
     const d = b.dataset;
     if (d.cmd) b.disabled = d.cmd === 'undo' ? !step : d.cmd === 'redo' ? step === hist.length - 1 : !s;
@@ -397,7 +399,7 @@ function render() {
   // The weight shows as the line itself: its color, and its thickness on screen (a highlighter draws 4×), up to 16 px.
   Object.assign($('wprev').style, { height: Math.max(1, Math.min(16, Math.round(now.w * (t === 'hl' ? 4 : 1)))) + 'px', background: now.c });
   // The dock shows only what applies to the selected shape, else to the tool: c(olor) w(idth) f(ill) s(ize) d(elete). Empty hides it.
-  $('props').dataset.k = (KINDS[s?.type ?? tool] + (s ? ' d' : '')).trim();
+  $('props').dataset.k = (KINDS[t] + (s ? ' d' : '')).trim();
   $('tsize').textContent = now.size ? Math.round(now.size) : '';
   $('wval').textContent = now.w ? Math.round(now.w) : '';
   report();
@@ -437,7 +439,7 @@ $('fks').innerHTML = FILLS.map(([k, n]) => `<button data-fk="${k}" aria-label="$
     : `<defs>${pattern('pv-' + k, k, 'currentColor', 3)}</defs><rect width="20" height="20" rx="3" fill="url(#pv-${k})"/>`}</svg></button>`).join('');
 $('tools').onclick = $('props').onclick = ({ target, detail }) => {
   if (gesture) return;
-  // A polygon being drawn is styled like a selected shape, but isn't committed until it closes.
+  // A polygon being drawn is styled like a selected shape, but isn't committed until it ends.
   const d = target.closest('button')?.dataset ?? {}, i = cur ?? poly, s = shapes[i];
   // Weight and text size −/+ step on press (see onpointerdown below); a click from the keyboard (detail 0) is one step.
   if (d.step) {
@@ -465,7 +467,7 @@ $('tools').onclick = $('props').onclick = ({ target, detail }) => {
     // The target picker picks what the swatches color.
     if (d.target) { colorTarget = d.target; return render(); }
     // Fill's button turns the last fill on and off; its menu picks one (and makes it the last).
-    const t = s?.type ?? tool, now = styleNow(s), on = now.fill || styleOf(t).last || 'solid';
+    const t = kindOf(s), now = styleNow(s), on = now.fill || styleOf(t).last || 'solid';
     const ch = d.c ? swatch(t, keyOf(t), d.c === 'none' ? null : d.c, on) : 'fill' in d ? { fill: now.fill ? false : on }
       : d.fk ? (d.fk === 'none' ? { fill: false } : { fill: d.fk, last: d.fk }) : 'see' in d ? { see: !now.see } : null;
     if (!ch) return;
@@ -556,9 +558,10 @@ function newShape(p) {
 }
 const atInk = ev => { const [x, y] = at(ev); return [x + off.x, y + off.y]; };
 
-// Polygon: a click adds a point; a double-click, Enter or a click on the first point closes it; Backspace drops the last
-// point; Esc cancels. Shift snaps the next edge to 45°. While drawing, poly is its index and its last point follows the
-// pointer; it goes into the history when it closes. Anything else (a tool, Undo, Save...) closes it first.
+// Polygon / polyline: a click adds a point; a click on the first point closes it into a polygon; a double-click or Enter
+// finishes it open, a polyline; Backspace drops the last point; Esc cancels. Shift snaps the next edge to 45°. While
+// drawing, poly is its index and its last point follows the pointer; it goes into the history when it ends. Anything
+// else (a tool, Undo, Save...) finishes it open first.
 let poly = null, polyAt = 0;
 function polyClick(e) {
   const p = atInk(e), k = shot.naturalWidth / shot.clientWidth, near = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]) < 8 * k;
@@ -569,22 +572,23 @@ function polyClick(e) {
   } else {
     const s = shapes[poly], pts = s.pts.slice(0, -1), q = e.shiftKey ? snap(pts.at(-1), p) : p;
     // The second press of a double-click lands on the point the first one added.
-    if ((e.timeStamp - polyAt < 500 && near(q, pts.at(-1))) || (pts.length >= 3 && near(p, pts[0]))) return endPoly();
+    if (e.timeStamp - polyAt < 500 && near(q, pts.at(-1))) return endPoly();
+    if (pts.length >= 3 && near(p, pts[0])) return endPoly(true);
     s.pts = [...pts, q, q];
   }
   polyAt = e.timeStamp;
   render();
 }
-// Closes the polygon being drawn; with fewer than 3 points there is nothing to keep.
-function endPoly() {
+// Ends the shape being drawn: closed, a polygon (3+ points), else open, a polyline (2+). Too few points: nothing to keep.
+function endPoly(close) {
   if (poly == null) return;
   const i = poly, { open, ...s } = shapes[i], pts = s.pts.slice(0, -1);
   poly = null;
-  if (pts.length < 3) {
+  if (pts.length < (close ? 3 : 2)) {
     shapes.splice(i, 1);
     return render();
   }
-  shapes[i] = { ...s, pts };
+  shapes[i] = close ? { ...s, pts } : { ...s, pts, open: true };
   cur = i;
   commit();
 }
@@ -736,7 +740,7 @@ onkeydown = e => {
   }
   if ((e.ctrlKey || e.metaKey) && (k === 'z' || k === 'y')) {
     e.preventDefault();
-    endPoly(); // a polygon being drawn closes first, as a toolbar Undo does
+    endPoly(); // a polygon being drawn ends (open) first, as a toolbar Undo does
     go(k === 'y' || e.shiftKey ? 1 : -1);
   } else if ((e.ctrlKey || e.metaKey) && k === 'c') {
     e.preventDefault();

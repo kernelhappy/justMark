@@ -678,7 +678,8 @@ for (const a of JSON.parse((await import('node:fs')).readFileSync('./src-tauri/t
   v.click({ target: 'fill' }); v.click({ c: 'blue' });
   assert.strictEqual(v.get().styleOf('pen').c, 'blue');
 }
-// Polygon: clicks add points; a double-click, Enter or the first point closes; Backspace drops a point; Esc cancels; Shift snaps.
+// Polygon / polyline: clicks add points; the first point closes (3+); a double-click, Enter or anything else ends it open (2+);
+// Backspace drops a point; Esc cancels; Shift snaps.
 {
   const block = SRC.match(/let poly = null, polyAt = 0;[\s\S]*?\n\}\);/)[0];
   const make = () => {
@@ -698,16 +699,21 @@ for (const a of JSON.parse((await import('node:fs')).readFileSync('./src-tauri/t
   assert.deepStrictEqual([p.shapes[0].pts, p.shapes[0].open, p.get(), p.log], [[[0, 0], [100, 0], [100, 100]], undefined, { poly: null, cur: 0 }, ['commit']]);
   p.shapes[0].fill = true;
   assert.match(toSvg(p.shapes, { x: 0, y: 0, w: 9, h: 9 }), /d="M0 0L100 0L100 100Z" fill="#e53935"/, 'closed polygon');
-  p = make(); // double-click closes without a doubled point
+  p = make(); // double-click ends it open, without a doubled point
   p.at(0, 0, 0); p.at(100, 0, 1000); p.at(100, 100, 2000); p.at(101, 100, 2200);
-  assert.strictEqual(p.shapes[0].pts.length, 3, 'double-click left a duplicate point');
+  assert.deepStrictEqual([p.shapes[0].pts, p.shapes[0].open, p.get(), p.log], [[[0, 0], [100, 0], [100, 100]], true, { poly: null, cur: 0 }, ['commit']], 'double-click did not end an open polyline');
+  p.shapes[0].fill = 'solid';
+  assert.match(toSvg(p.shapes, { x: 0, y: 0, w: 9, h: 9 }), /d="M0 0L100 0L100 100" fill="none"/, 'an open polyline is filled');
+  p = make(); // Enter (endPoly) keeps a 2-point polyline open
+  p.at(0, 0, 0); p.at(100, 0, 1000); p.endPoly();
+  assert.deepStrictEqual([p.shapes[0].pts, p.shapes[0].open, p.log], [[[0, 0], [100, 0]], true, ['commit']], 'a 2-point polyline was not kept');
   p = make(); // Backspace drops the last point; Shift snaps; fewer than 3 points is nothing
   p.at(0, 0, 0); p.at(100, 10, 1000, { shiftKey: true });
   assert.deepStrictEqual(p.shapes[0].pts[1].map(Math.round), [100, 0], 'Shift did not snap the edge');
   p.dropPoint();
   assert.strictEqual(p.shapes[0].pts.length, 2);
   p.endPoly();
-  assert.deepStrictEqual([p.shapes.length, p.log], [0, []], 'a 1-point polygon was kept');
+  assert.deepStrictEqual([p.shapes.length, p.log], [0, []], 'a 1-point polyline was kept');
   p = make(); p.at(0, 0, 0); p.at(50, 50, 1000); p.cancelPoly();
   assert.deepStrictEqual([p.shapes.length, p.get().poly], [0, null], 'Esc did not cancel');
   // Keys while drawing: Esc cancels, Enter closes, Backspace drops a point (not the selected shape).
@@ -749,7 +755,7 @@ for (const a of JSON.parse((await import('node:fs')).readFileSync('./src-tauri/t
   const kinds = new Function(`${SRC.match(/const KINDS = .*/)[0]} return KINDS;`)();
   assert.deepStrictEqual(Object.keys(kinds).filter(k => kinds[k].includes('o')), ['pen', 'line', 'arrow', 'rect', 'ellipse', 'cloud', 'poly']);
 }
-// A polygon being drawn closes before Ctrl+Z / Ctrl+Y and before Crop, so the history never holds an open one.
+// A polygon being drawn ends (open) before Ctrl+Z / Ctrl+Y and before Crop, so the history never holds one being drawn.
 {
   const log = [];
   const k = new Function('run', 'finishEdit', 'cropping', 'remove', 'edit', 'go', 'render', 'stage', 'closeEditor', 'endPoly',
@@ -758,6 +764,14 @@ for (const a of JSON.parse((await import('node:fs')).readFileSync('./src-tauri/t
   k({ ctrlKey: true, key: 'z', target: { tagName: 'BODY' }, preventDefault() {} });
   assert.deepStrictEqual(log, ['end', 'go'], 'Ctrl+Z with a polygon being drawn');
   assert.match(SRC.match(/\$\('crop'\)\.onclick = [\s\S]*?\n\};/)[0], /finishEdit\(\);\n  endPoly\(\);/, 'Crop does not close a polygon being drawn');
+}
+// An open polyline's dock is a line's (no Fill, no target picker): a swatch with Fill picked still colors its line.
+{
+  const shapes = [{ type: 'poly', c: 'red', w: 4, fill: 'solid', pts: [[0, 0], [9, 9]], open: true }], t = toolbar({ shapes, cur: 0 });
+  t.click({ target: 'fill' }); t.click({ c: 'blue' });
+  assert.deepStrictEqual([shapes[0].c, shapes[0].fc, t.get().styleOf('poly').c], ['blue', undefined, 'blue'], 'a swatch on a polyline went to its fill');
+  const kindOf = new Function('shapes', 'poly', `let tool = 'poly'; ${SRC.match(/const kindOf = .*/)[0]} return kindOf;`);
+  assert.deepStrictEqual([kindOf(shapes, null)(shapes[0]), kindOf(shapes, 0)(shapes[0]), kindOf(shapes, null)({ type: 'poly' })], ['line', 'poly', 'poly'], 'dock kinds');
 }
 // Sliders in the dock's menus must keep their mousedown (the dock blocks it elsewhere to keep an open text focused).
 {
