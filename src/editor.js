@@ -141,7 +141,7 @@ let swapping = false, shown = false;
 // The capture goes in image px, not over devicePixelRatio: that is the scale where the hidden window was made, maybe not
 // the monitor it opens on. Chrome and minimum are CSS px, which Rust scales for that monitor.
 // 960 wide keeps the top bar on one row and the style dock clear of the zoom pill; 104/120 is the room the dock takes below.
-const show = (w, h) => shown || (shown = true, invoke('ready', { img: [w, h], chrome: [48, header.offsetHeight + 120], min: [960, 480] }));
+const show = (w, h) => shown || (shown = true, onerror = onunhandledrejection = null, invoke('ready', { img: [w, h], chrome: [48, header.offsetHeight + 120], min: [960, 480] }));
 shot.onload = () => {
   swapping = false;
   applyZoom();
