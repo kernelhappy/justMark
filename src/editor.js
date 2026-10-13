@@ -87,8 +87,9 @@ const state = () => hist[step] + JSON.stringify(off);
 let saved = '[]{"x":0,"y":0}';
 const closeEditor = () => (state() === saved || confirm('Close without saving or copying your markup?')) && invoke('close');
 
-// One action at a time: a second Save would open a second dialog, and encodes are heavy. A press while one runs waits
-// its turn (the latest wins), so a second Copy exports what's on screen then instead of being dropped (filled boxes redact).
+// One action at a time: a second Save would open a second dialog, and encodes are heavy. A Copy pressed while one runs
+// waits its turn, so it exports what's on screen then instead of being dropped (filled boxes redact). Save/Print presses
+// while busy are dropped: a double-click on Save must not queue a second dialog.
 let busy = false, next = null;
 async function run(key) {
   const act = ACTIONS[key];
@@ -96,7 +97,7 @@ async function run(key) {
   // The pending crop box isn't in png yet: exporting now would ship the area being cut away (Ctrl+P lands here too).
   if (cropping()) { $('status').textContent = 'Apply or cancel the crop first'; return; }
   finishEdit(); // toolbar presses keep an open text focused, so its typed text isn't in shapes yet
-  if (busy) { next = key; return; }
+  if (busy) { if (key === 'copy') next = key; return; }
   busy = true;
   $('status').textContent = 'Working…';
   try {
@@ -140,7 +141,7 @@ let swapping = false, shown = false;
 // The capture goes in image px, not over devicePixelRatio: that is the scale where the hidden window was made, maybe not
 // the monitor it opens on. Chrome and minimum are CSS px, which Rust scales for that monitor.
 // 960 wide keeps the top bar on one row and the style dock clear of the zoom pill; 104/120 is the room the dock takes below.
-const show = (w, h) => shown || (shown = true, invoke('ready', { img: [w, h], chrome: [48, header.offsetHeight + 120], min: [960, 480] }));
+const show = (w, h) => shown || (shown = true, onerror = onunhandledrejection = null, invoke('ready', { img: [w, h], chrome: [48, header.offsetHeight + 120], min: [960, 480] }));
 shot.onload = () => {
   swapping = false;
   applyZoom();

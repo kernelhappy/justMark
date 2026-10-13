@@ -412,7 +412,8 @@ globalThis.isReload = (await import('./src/markup.js')).isReload; // editor.js i
   const src = (await import('node:fs')).readFileSync('./src/editor.js', 'utf8').match(/let busy[\s\S]*?\n}\n/)[0];
   const copied = [];
   let screen = 'no box', release;
-  const ACTIONS = { async copy() { const at = screen; await new Promise(r => { release ??= r; if (release !== r) r(); }); copied.push(at); return 'Copied as PNG'; } };
+  const ACTIONS = { async copy() { const at = screen; await new Promise(r => { release ??= r; if (release !== r) r(); }); copied.push(at); return 'Copied as PNG'; },
+    async save() { copied.push('save'); return 'Saved'; } };
   const status = {};
   const run = new Function('ACTIONS', 'png', 'finishEdit', '$', 'state', 'opts', 'cropping', `let saved; ${src} return run;`)(
     ACTIONS, {}, () => {}, () => status, () => screen, { format: {} }, () => false);
@@ -422,6 +423,13 @@ globalThis.isReload = (await import('./src/markup.js')).isReload; // editor.js i
   release();
   await first; await second;
   assert.deepStrictEqual(copied, ['no box', 'box'], 'second Copy during an encode is dropped');
+  // A Save pressed while busy is dropped, not queued: a double-click on Save would open a second dialog.
+  release = undefined;
+  const third = run('copy');
+  await run('save');
+  release();
+  await third;
+  assert.deepStrictEqual(copied, ['no box', 'box', 'box'], 'a Save pressed during a Copy was queued');
 }
 // JPG/PDF have no alpha: a transparent PNG (Open with) must be flattened onto white, not black (bughunt export-r1-3).
 {

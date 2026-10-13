@@ -11,9 +11,11 @@ when changing anything structural (see Budgets).
 
 ## Behavior
 
-- **Every snip opens the editor automatically.** Snipping Tool's auto-save must be on; the tray process
-  watches the Screenshots known folder (`FOLDERID_Screenshots`, follows moves/OneDrive) for **file
-  creations** of `.png/.jpg/.jpeg`. Renames and modifications are ignored on purpose (see Save).
+- **Every snip opens the editor automatically** (default; see Settings). Snipping Tool's auto-save must be
+  on; the tray process watches the Screenshots known folder (`FOLDERID_Screenshots`) for **file
+  creations** of `.png/.jpg/.jpeg`. Renames and modifications are ignored on purpose (see Save). The
+  folder's parent is watched too, only to notice the folder being moved away (Location > Move, OneDrive
+  backup of Pictures); the location is looked up again then, never on a timer.
 - The snip is still on the clipboard, so the "just paste into an email" case is: snip, paste, Esc.
 - **Esc**: steps back (cancel crop / finish text / drop selection / back to Select), and with nothing left
   to step back from, closes the editor. If markup or a crop exists that hasn't been Saved or Copied since,
@@ -23,8 +25,28 @@ when changing anything structural (see Budgets).
   center it there and show it.
 - **Open with / second launch**: argv files go to the running instance (single-instance plugin) and open
   like a snip. The NSIS bundle registers png/jpg/jpeg as "Editor" associations.
-- **Tray**: "Start at login" (HKCU Run entry, quoted exe path, via the `auto-launch` crate in CurrentUser mode; off by default) and "Quit". Closing the
-  last window never exits the process; only Quit does.
+- **Tray**: "Start at login" (HKCU Run entry, quoted exe path, via the `auto-launch` crate in CurrentUser
+  mode; off by default) and "Quit". Closing the last window never exits the process; only Quit does.
+- **Save dialog errors look like Cancel** (known limit, accepted 2026-10-13): `rfd` maps a COM/dialog error to
+  `None`. Fixing it means our own IFileDialog code; not worth it for a rare failure.
+
+## Settings (decided 2026-10-13, not built yet)
+
+A **Settings…** tray item opens a small settings window (a WebView2 window like the editor: ~100 MB only
+while open, nothing idle). Settings live in a small file in the app config dir, read by Rust (the
+window-opening rules apply before any page exists). The tray menu becomes Settings… and Quit; Start at
+login moves into the window.
+
+| Setting | Default | Behavior |
+|---|---|---|
+| Auto open on snip | on | Off: snips only land in the folder. |
+| Open latest snip hotkey | Shift+Alt+S | Global hotkey (Tauri global-shortcut plugin) opens the most recent snip, whatever Auto open is set to. Configurable; the window shows "taken" when registration fails. PrtScn is left to Windows (never offered). |
+| New snip opens a new window | on | Off: the snip replaces the image in the last-used editor if it has no unsaved work; otherwise a new window opens. |
+| Max windows | 5 | Opening one more closes the oldest window **without** unsaved work; if every window has unsaved work, the oldest closes anyway, silently (user's call: bounds memory on bursts, e.g. bulk copies or OneDrive sync-down). |
+| Auto copy on focus loss | off | When an editor loses focus and its markup changed since the last Save/Copy, it copies the marked-up PNG (same as Copy, so it counts as saved and Esc then closes without asking). |
+| Start at login | off | As in Tray above. |
+
+"Unsaved work" = the same check as Esc's confirm (markup or crop not Saved or Copied since).
 
 ## Architecture
 
