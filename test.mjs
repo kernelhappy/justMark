@@ -471,3 +471,12 @@ for (const a of JSON.parse((await import('node:fs')).readFileSync('./src-tauri/t
   await applyCrop();
   assert.match(status.textContent, /oom/, 'crop failure was silent');
 }
+
+// A swapped-in image that fails to load must clear `swapping`, or every stage gesture stays blocked (editor-r1-10).
+{
+  const line = (await import('node:fs')).readFileSync('./src/editor.js', 'utf8').match(/shot\.onerror = .*/)[0];
+  let swapping = true, png = 'x';
+  const shot = {}, el = { textContent: '' }, $ = () => el, show = () => {}, document = { querySelectorAll: () => [] };
+  eval(line); shot.onerror();
+  assert.strictEqual(swapping, false, 'failed image load left swapping stuck on');
+}
