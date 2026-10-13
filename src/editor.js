@@ -1,5 +1,5 @@
 import { canvasToPdf, toDib } from './pdf.js';
-import { toSvg, bounds, handles, move, resize, dragEdges, snap, nextSize, clean, isReload, editBox, LH, PAD, clearScroll, newTextY } from './markup.js';
+import { toSvg, bounds, handles, move, resize, dragEdges, snap, nextSize, clean, isReload, editBox, LH, PAD, clearScroll, newTextY, retext } from './markup.js';
 
 const $ = id => document.getElementById(id);
 
@@ -300,11 +300,21 @@ const styleOf = type => type === 'hl' ? style.hl : style.pen;
 const filled = s => s && 'fill' in s ? s.fill : style.pen.fill;
 const measure = new OffscreenCanvas(1, 1).getContext('2d');
 measure.font = '600 100px system-ui, sans-serif';
+const emOf = text => text.split('\n').reduce((m, l) => Math.max(m, measure.measureText(l).width), 0) / 100;
 
 function render() {
   const W = shot.naturalWidth;
   if (!W) return;
-  ink.innerHTML = toSvg(shapes, { ...off, w: W, h: shot.naturalHeight }, 12 * W / shot.clientWidth, dpr);
+  let drawn = shapes;
+  if (editing != null) {
+    const s = shapes[editing], k = shot.clientWidth / W, p = s.tip ? PAD * s.size : 0, H = shot.naturalHeight, b = bounds(s);
+    Object.assign(edit.style, editBox(s, b, off, W, H, p), { font: `600 ${s.size * k}px/${LH} system-ui, sans-serif`, color: s.tip ? '#111' : s.c, background: s.tip || !['#ffffff', '#fdd835'].includes(s.c) ? '' : '#000c' });
+    // A callout being typed keeps its box and tail, sized to the editor (which is at least 2ch wide, and has the caret).
+    if (s.tip) { const v = clean(edit.value); drawn = shapes.with(editing, retext(s, v, Math.max(emOf(v), edit.offsetWidth / (s.size * k)), off)); }
+  }
+  ink.innerHTML = toSvg(drawn, { ...off, w: W, h: shot.naturalHeight }, 12 * W / shot.clientWidth, dpr);
+  // The editor shows the text being typed: hide the drawn text (a callout's box and tail stay).
+  if (editing != null) ink.querySelector(`[data-i="${editing}"]${shapes[editing].tip ? ' > text' : ''}`).style.visibility = 'hidden';
   const s = shapes[cur];
   pickBox.hidden = !s || editing != null;
   if (!pickBox.hidden) {
@@ -316,11 +326,6 @@ function render() {
       i.hidden = !hs.includes(h);
       if (p) Object.assign(i.style, { left: `calc(${(p[0] - b.l) / (b.r - b.l || 1) * 100}% - 6px)`, top: `calc(${(p[1] - b.t) / (b.b - b.t || 1) * 100}% - 6px)` });
     }
-  }
-  if (editing != null) {
-    const s = shapes[editing], k = shot.clientWidth / W, p = s.tip ? PAD * s.size : 0, H = shot.naturalHeight, b = bounds(s);
-    ink.querySelector(`[data-i="${editing}"]`).style.visibility = 'hidden';
-    Object.assign(edit.style, editBox(s, b, off, W, H, p), { font: `600 ${s.size * k}px/${LH} system-ui, sans-serif`, color: s.tip ? '#111' : s.c, background: s.tip || !['#ffffff', '#fdd835'].includes(s.c) ? '' : '#000c' });
   }
   const now = s ?? styleOf(tool);
   for (const b of document.querySelectorAll('[data-tool], [data-c], [data-w], [data-fill], [data-cmd]')) {
@@ -408,15 +413,8 @@ function finishEdit() {
   const i = editing, text = clean(edit.value).trimEnd();
   editing = null;
   edit.hidden = true;
-  const was = shapes[i];
-  if (text) shapes[i] = { ...shapes[i], text, em: text.split('\n').reduce((m, l) => Math.max(m, measure.measureText(l).width), 0) / 100 };
-  if (text && was.tip) {
-    // A callout left of or above its point keeps the edge facing the point, so new text grows away from it rather than over it.
-    const a = bounds(was), b = bounds(shapes[i]);
-    // It stops at the image's left/top edge (or where it already was), or the overlay and exports clip the text.
-    if (a.l + a.r < 2 * was.tip[0]) shapes[i].x = Math.max(Math.min(off.x, was.x), was.x + a.r - b.r);
-    if (a.t + a.b < 2 * was.tip[1]) shapes[i].y = Math.max(Math.min(off.y, was.y), was.y + a.b - b.b);
-  } else if (!text) {
+  if (text) shapes[i] = retext(shapes[i], text, emOf(text), off);
+  else {
     shapes.splice(i, 1);
     cur = null;
   }
@@ -424,6 +422,7 @@ function finishEdit() {
 }
 // A window blur (Alt+Tab) keeps the textarea focused for when the window returns; only a real blur ends the edit.
 edit.onblur = () => document.activeElement === edit || finishEdit();
+edit.oninput = () => shapes[editing]?.tip && render(); // a callout's box follows the text
 // Menu Print's dialog is that kind of blur too, so finish before it lays out the page.
 addEventListener('beforeprint', finishEdit);
 

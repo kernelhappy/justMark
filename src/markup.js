@@ -124,6 +124,18 @@ export const toSvg = (shapes, v, pad = 0, dpr = 1) =>
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${v.x} ${v.y} ${v.w} ${v.h}" width="${v.w}" height="${v.h}">` +
   shapes.map((s, i) => `<g data-i="${i}">${draw(s, 0, dpr)}${pad ? `<g opacity="0">${draw(s, pad, dpr)}</g>` : ''}</g>`).join('') + '</svg>';
 
+// The shape with new text (em: its widest line per unit of size). A callout left of or above its point keeps the edge facing
+// the point, so new text grows away from it rather than over it. It stops at the image's left/top edge (or where it already
+// was), or the overlay and exports clip the text. Used while typing too, so the box and tail follow the text.
+export function retext(was, text, em, off) {
+  const s = { ...was, text, em };
+  if (!was.tip) return s;
+  const a = bounds(was), b = bounds(s);
+  if (a.l + a.r < 2 * was.tip[0]) s.x = Math.max(Math.min(off.x, was.x), was.x + a.r - b.r);
+  if (a.t + a.b < 2 * was.tip[1]) s.y = Math.max(Math.min(off.y, was.y), was.y + a.b - b.b);
+  return s;
+}
+
 // Where the text editing box sits, as % of the image, capped so it never grows past the image edge (the committed text is clipped there).
 // A callout left of or above its point grows away from it while typing, as finishEdit will place it.
 export function editBox(s, b, off, W, H, p) {

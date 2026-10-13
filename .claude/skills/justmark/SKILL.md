@@ -117,7 +117,7 @@ So mouse-up → editor visible ≈ 0.6–0.8 s. Regressions past ~1 s or idle pa
   with a weight (highlighter keeps its 4× drawn width; callout border). Holding − or + repeats: one step,
   then after 400 ms ~12 steps/s until release or the pointer leaves. Text size's −/+ repeat the same way.
   A held run on a selected shape is one undo step.
-- **Callout tail stays drawn while its text is being typed.**
+- **Callout tail stays drawn while its text is being typed** (built): the box and tail follow the editor live.
 - **Polygon (G):** click adds a point; double-click, Enter or clicking the first point closes; Backspace
   drops the last point; Esc cancels the polygon in progress. Shift snaps the next edge to 45°. Weight,
   Fill and patterns as rect.

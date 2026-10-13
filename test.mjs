@@ -357,16 +357,16 @@ globalThis.isReload = (await import('./src/markup.js')).isReload; // editor.js i
 {
   const big = Array.from({ length: 150000 }, (_, i) => [i, 1 - i]);
   assert.deepStrictEqual(bounds({ pts: big }), { l: 0, t: -149998, r: 149999, b: 1 }, 'bounds of a 150k-point stroke');
-  const line = (await import('node:fs')).readFileSync('./src/editor.js', 'utf8').match(/if \(text\) shapes\[i\] = .*/)[0];
-  const shapes = [{}], measure = { measureText: l => ({ width: l.length * 10 }) };
-  new Function('shapes', 'i', 'text', 'measure', line)(shapes, 0, 'ab\n' + '\n'.repeat(150000), measure);
-  assert.strictEqual(shapes[0].em, 0.2, 'finishEdit measures a 150k-line text');
+  const line = (await import('node:fs')).readFileSync('./src/editor.js', 'utf8').match(/const emOf = .*/)[0];
+  const measure = { measureText: l => ({ width: l.length * 10 }) };
+  assert.strictEqual(new Function('measure', `${line} return emOf;`)(measure)('ab\n' + '\n'.repeat(150000)), 0.2, 'finishEdit measures a 150k-line text');
 }
 // A callout dragged up-left of its point grows away from the point, not back over it.
 {
   const src = (await import('node:fs')).readFileSync('./src/editor.js', 'utf8').match(/function finishEdit[\s\S]*?\n}/)[0];
   const shapes = [{ type: 'callout', size: 10, x: 60, y: 60, text: '', em: 0, tip: [100, 100] }], measure = { measureText: l => ({ width: l.length * 60 }) };
-  const run = (shapes, value) => new Function('shapes', 'measure', 'bounds', 'clean', 'commit', 'edit', 'off', `let editing = 0, cur = 0; ${src}; finishEdit();`)(shapes, measure, bounds, clean, () => {}, { value }, { x: 0, y: 0 });
+  const { retext } = await import('./src/markup.js'), emOf = t => t.split('\n').reduce((m, l) => Math.max(m, measure.measureText(l).width), 0) / 100;
+  const run = (shapes, value) => new Function('shapes', 'retext', 'emOf', 'clean', 'commit', 'edit', 'off', `let editing = 0, cur = 0; ${src}; finishEdit();`)(shapes, retext, emOf, clean, () => {}, { value }, { x: 0, y: 0 });
   run(shapes, 'abcdefgh\nx');
   const b = bounds(shapes[0]);
   assert.ok(b.r <= 100 && b.b <= 100, 'callout box covers its own point');
@@ -589,4 +589,14 @@ for (const a of JSON.parse((await import('node:fs')).readFileSync('./src-tauri/t
   assert.deepStrictEqual([esc(), sent.at(-1)], [true, true], 'an Auto copy made the window disposable');
   await run('copy');
   assert.deepStrictEqual(sent.at(-1), false, 'a pressed Copy left the window unsaved for Rust');
+}
+// Callout tail while typing: the live box (retext) keeps the edge facing the point as the text grows, and a callout right of it grows right.
+{
+  const { retext, bounds } = await import('./src/markup.js');
+  const left = { type: 'callout', size: 10, x: 200, y: 40, text: '', em: 0, tip: [400, 50] }, off = { x: 0, y: 0 };
+  const r0 = bounds(left).r;
+  for (const em of [1, 5, 9]) assert.strictEqual(bounds(retext(left, 'x', em, off)).r, r0, `left-of-point callout moved its right edge at em ${em}`);
+  const right = { ...left, tip: [0, 50] };
+  assert.strictEqual(retext(right, 'x', 9, off).x, 200, 'right-of-point callout moved');
+  assert.strictEqual(retext({ type: 'text', size: 10, x: 1, y: 2, text: '', em: 0 }, 'ab', 2, off).x, 1);
 }
