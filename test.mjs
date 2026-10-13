@@ -86,18 +86,34 @@ for (const [active, ends] of [['edit', false], ['body', true]]) {
   edit.onblur();
   assert.strictEqual(ended, ends, `blur with ${active} focused`);
 }
-// Fill with a line selected toggles the default fill both ways (a line has no fill of its own).
-{
-  const src = (await import('node:fs')).readFileSync('./src/editor.js', 'utf8');
-  const style = { pen: { fill: false }, hl: {} }, shapes = [{ type: 'line', pts: [] }];
+// Style per tool, remembered in localStorage (screen px): restyling a selected shape sets its tool's style, not the others'.
+const SRC = (await import('node:fs')).readFileSync('./src/editor.js', 'utf8');
+const STYLE_SRC = [/const RED = [\s\S]*?\n\};/, /function styleOf\(t\) \{[\s\S]*?\n\}/, /function setStyle\(t, k, v\) \{[\s\S]*?\n\}/, /const styleNow = .*/].map(re => SRC.match(re)[0]).join('\n');
+// The toolbar's click handler with the style code, over fake storage; returns { click(dataset), get() }.
+const toolbar = ({ shapes = [], cur = null, editing = null, tool = 'select', dpr = 1, store = {}, edit = { value: '' }, log = [] } = {}) => {
   const tools = {};
-  new Function('$', 'shapes', 'style', 'styleOf', 'commit', 'render', `let gesture = false, cur = 0, editing = null, tool = 'select', dpr = 1; ${src.match(/const filled = .*/)?.[0]}; ${src.match(/\$\('tools'\)\.onclick = [\s\S]*?\n};/)[0]}`)(
-    () => tools, shapes, style, () => style.pen, () => {}, () => {});
-  const click = () => tools.onclick({ target: { closest: () => ({ dataset: { fill: '' } }) } });
-  click();
-  assert.strictEqual(style.pen.fill, true);
-  click();
-  assert.strictEqual(style.pen.fill, false, 'second Fill click turns the default fill off');
+  const get = new Function('$', 'shapes', 'commit', 'render', 'finishEdit', 'go', 'edit', 'localStorage', 'nextSize', 'cropping', 'stage',
+    `let gesture = false, cur = ${cur}, editing = ${editing}, tool = '${tool}', dpr = ${dpr}, remove; ${STYLE_SRC}
+    ${SRC.match(/\$\('tools'\)\.onmousedown = .*/)[0]}; ${SRC.match(/\$\('tools'\)\.onclick = [\s\S]*?\n};/)[0]} return () => ({ cur, editing, styleOf });`)(
+    () => tools, shapes, () => log.push('commit'), () => {}, () => log.push('finish'), () => log.push('go'), edit, store, nextSize, () => false, { dataset: {} });
+  return { tools, click: dataset => tools.onclick({ target: { closest: () => ({ dataset }) } }), get, store, log };
+};
+{
+  const shapes = [{ type: 'rect', c: 'red', w: 8, fill: false }, { type: 'line', c: 'red', w: 8, pts: [] }];
+  const t = toolbar({ shapes, cur: 0, dpr: 2 });
+  t.click({ fill: '' });
+  assert.deepStrictEqual([shapes[0].fill, t.get().styleOf('rect').fill, t.get().styleOf('ellipse').fill], [true, true, false], 'Fill on a selected rect');
+  t.click({ c: 'blue' });
+  assert.deepStrictEqual([shapes[0].c, t.get().styleOf('rect').c, t.get().styleOf('line').c], ['blue', 'blue', '#e53935'], 'color went to another tool');
+  const u = toolbar({ shapes, cur: 1, dpr: 2, store: t.store });
+  u.click({ w: '2' });
+  assert.deepStrictEqual([shapes[1].w, u.get().styleOf('line').w], [4, 2], 'weight is picked in screen px, stored in capture px');
+  assert.strictEqual(JSON.parse(t.store['style.rect']).c, 'blue', 'not in localStorage');
+  t.store['style.pen'] = '{oops';
+  assert.strictEqual(t.get().styleOf('pen').c, '#e53935', 'corrupt storage did not fall back to the default');
+  const v = toolbar({ tool: 'arrow' });
+  v.click({ c: 'green' });
+  assert.strictEqual(v.get().styleOf('arrow').c, 'green', 'swatch with no selection did not set the tool style');
 }
 // Delete/Backspace on the Format or Quality radios must not delete the selected shape.
 globalThis.document = { querySelector: () => null }; // no Save menu open
@@ -212,18 +228,6 @@ globalThis.isReload = (await import('./src/markup.js')).isReload; // editor.js i
   assert.ok(fires < 10, 'Fit width kept flipping the scrollbar');
   assert.ok(parseFloat(cap.style.width) + 32 <= cwNow(), `Fit width ${cap.style.width} overflows ${cwNow()}px`);
 }
-// Zooming the browser keeps the picked width and text size in screen pixels, and the pressed-state match exact.
-{
-  const src = (await import('node:fs')).readFileSync('./src/editor.js', 'utf8');
-  const style = { pen: { w: 4, size: 20 }, hl: { w: 8 } }, g = { devicePixelRatio: 1 };
-  const [sync, get] = new Function('style', 'g', `let dpr = 1; ${src.match(/function syncDpr\(\) \{[\s\S]*?\n\}/)[0].replaceAll('devicePixelRatio', 'g.devicePixelRatio')} return [syncDpr, () => dpr];`)(style, g);
-  for (const r of [1.1, 1.25, 2.5, 0.9, 1]) {
-    g.devicePixelRatio = r;
-    sync();
-    assert.equal(get(), r);
-    assert.ok(style.pen.w === 4 * r && style.pen.size === 20 * r && style.hl.w === 8 * r, `at ${r}: ${JSON.stringify(style)}`);
-  }
-}
 // Re-croppable crop: a crop is a view of the original, undoable; Crop again shows the original with the crop as the box.
 // From Apply until the new image has loaded, a gesture would mix the old image's geometry with the new offset.
 {
@@ -283,20 +287,16 @@ globalThis.isReload = (await import('./src/markup.js')).isReload; // editor.js i
 }
 // Toolbar presses while a new text is open: the editor keeps focus (so blur can't delete the empty text first), a swatch styles the pending text, Undo only cancels it.
 {
-  const src = (await import('node:fs')).readFileSync('./src/editor.js', 'utf8');
-  const style = { pen: { c: 'red', size: 20 }, text: { c: 'red' } }, shapes = [{ type: 'text', c: 'red', size: 20, text: '' }], tools = {}, log = [];
-  new Function('$', 'shapes', 'style', 'styleOf', 'commit', 'render', 'finishEdit', 'go', 'edit', 'log', `let gesture = false, cur = 0, editing = 0, tool = 'text', dpr = 1; const stage = { dataset: {} };
-    ${src.match(/const filled = .*/)?.[0]}; ${src.match(/\$\('tools'\)\.onmousedown = .*/)?.[0]}; ${src.match(/\$\('tools'\)\.onclick = [\s\S]*?\n};/)[0]}`)(
-    () => tools, shapes, style, () => style.text, () => log.push('commit'), () => {}, () => log.push('finish'), () => log.push('go'), { value: '' }, log);
+  const shapes = [{ type: 'text', c: 'red', size: 20, text: '' }], t = toolbar({ shapes, cur: 0, editing: 0, tool: 'text' });
   let prevented = 0;
-  tools.onmousedown({ preventDefault: () => prevented++ });
+  t.tools.onmousedown({ preventDefault: () => prevented++ });
   assert.strictEqual(prevented, 1, 'toolbar press moved focus out of the editor');
-  tools.onclick({ target: { closest: () => ({ dataset: { c: 'blue' } }) } });
+  t.click({ c: 'blue' });
   assert.strictEqual(shapes[0].c, 'blue', 'swatch did not style the pending text');
-  assert.ok(!log.includes('commit'), 'swatch committed an empty text');
-  log.length = 0;
-  tools.onclick({ target: { closest: () => ({ dataset: { cmd: 'undo' } }) } });
-  assert.ok(!log.includes('go'), 'Undo on an empty new text also undid the previous commit');
+  assert.ok(!t.log.includes('commit'), 'swatch committed an empty text');
+  t.log.length = 0;
+  t.click({ cmd: 'undo' });
+  assert.ok(!t.log.includes('go'), 'Undo on an empty new text also undid the previous commit');
 }
 // editor-r2-4: clearing an existing text then Undo must undo, not delete the shape as a new step.
 {

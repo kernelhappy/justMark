@@ -110,8 +110,8 @@ So mouse-up → editor visible ≈ 0.6–0.8 s. Regressions past ~1 s or idle pa
 
 ## Editor features (decided 2026-10-13, not built yet)
 
-- **Style per tool, remembered.** Each tool keeps its own colors, weight, fill/pattern, see-through and
-  text size; restyling a selected shape updates its tool's style. Kept in localStorage (shared by every
+- **Style per tool, remembered** (built). Each tool keeps its own colors, weight, fill/pattern, see-through and
+  text size; restyling a selected shape updates its tool's style. Kept in localStorage (`style.<tool>`, screen px; shared by every
   editor window, like Save's format), so it carries to the next shape and the next window.
 - **Weight − value +** replaces Thin/Medium/Thick: 1–16 screen px, step 1, default 4, for every tool
   with a weight (highlighter keeps its 4× drawn width; callout border). Holding − or + repeats: one step,

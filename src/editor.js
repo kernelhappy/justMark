@@ -182,7 +182,7 @@ shot.onload = () => {
 // A PNG that passed the magic check but won't decode: disable everything as for a failed load, or Save writes the broken bytes.
 shot.onerror = () => { swapping = false; $('status').textContent ||= "Can't open this image."; png = null; for (const el of document.querySelectorAll('button, input')) el.disabled = true; show(0, 0); };
 if (!png) show(0, 0);
-onresize = () => { syncDpr(); applyZoom(); };
+onresize = () => { dpr = devicePixelRatio; applyZoom(); };
 // A move to a monitor with another scale factor can keep the CSS size and fire no resize; a resolution query still flips.
 const watchDpr = () => matchMedia(`(resolution: ${devicePixelRatio}dppx)`).addEventListener('change', () => { onresize(); watchDpr(); }, { once: true });
 watchDpr();
@@ -302,22 +302,28 @@ function cropDown(e) {
 }
 
 // Markup: shapes live in pixels of the uncropped capture (see markup.js); off is where the current image starts in them.
-// Widths and text sizes are picked in screen pixels and stored in capture pixels.
+// Widths and text sizes are picked in screen pixels and stored in capture pixels: times dpr, which follows browser zoom and the monitor.
 let dpr = devicePixelRatio;
-// Browser zoom or another monitor changes devicePixelRatio; keep the picked width and text size the same on screen.
-// Picks are whole screen pixels, so rounding keeps d.w * dpr === style.w exact for the pressed state.
-function syncDpr() {
-  if (devicePixelRatio === dpr) return;
-  for (const s of [style.pen, style.hl]) for (const k of ['w', 'size']) if (k in s) s[k] = Math.round(s[k] / dpr) * devicePixelRatio;
-  dpr = devicePixelRatio;
-}
 // What the style dock offers per shape type or tool (see render).
 const KINDS = { select: '', hl: 'c w', pen: 'c w', line: 'c w', arrow: 'c w', rect: 'c w f', ellipse: 'c w f', cloud: 'c w f', text: 'c s', callout: 'c w s' };
 let shapes = [], hist = ['[[],null]'], step = 0, off = { x: 0, y: 0 }, tool = 'select', cur = null, editing = null, lastDown = 0, gesture = false;
-const style = { pen: { c: '#e53935', w: 4 * dpr, size: 20 * dpr, fill: false }, hl: { c: '#fdd835', w: 4 * dpr } };
-const styleOf = type => type === 'hl' ? style.hl : style.pen;
-// Lines, pens and text have no fill, so Fill shows and toggles the default with one of them selected.
-const filled = s => s && 'fill' in s ? s.fill : style.pen.fill;
+// Each tool's style, in screen pixels, for its next shape. Kept in localStorage (shared by every editor window, like Save's
+// format), one key per tool so two windows restyling different tools don't overwrite each other.
+const RED = '#e53935', STYLES = {
+  hl: { c: '#fdd835', w: 4 }, pen: { c: RED, w: 4 }, line: { c: RED, w: 4 }, arrow: { c: RED, w: 4 },
+  rect: { c: RED, w: 4, fill: false }, ellipse: { c: RED, w: 4, fill: false }, cloud: { c: RED, w: 4, fill: false },
+  text: { c: RED, size: 20 }, callout: { c: RED, w: 4, size: 20 },
+};
+function styleOf(t) {
+  let s;
+  try { s = JSON.parse(localStorage['style.' + t]); } catch {} // none stored yet, or storage unavailable
+  return { ...STYLES[t], ...s };
+}
+function setStyle(t, k, v) {
+  try { localStorage['style.' + t] = JSON.stringify({ ...styleOf(t), [k]: v }); } catch {}
+}
+// What the dock shows: the selected shape's style (in screen pixels), else the tool's.
+const styleNow = s => s ? { ...s, w: s.w / dpr, size: s.size / dpr } : styleOf(tool);
 const measure = new OffscreenCanvas(1, 1).getContext('2d');
 measure.font = '600 100px system-ui, sans-serif';
 const emOf = text => text.split('\n').reduce((m, l) => Math.max(m, measure.measureText(l).width), 0) / 100;
@@ -347,15 +353,15 @@ function render() {
       if (p) Object.assign(i.style, { left: `calc(${(p[0] - b.l) / (b.r - b.l || 1) * 100}% - 6px)`, top: `calc(${(p[1] - b.t) / (b.b - b.t || 1) * 100}% - 6px)` });
     }
   }
-  const now = s ?? styleOf(tool);
+  const now = styleNow(s);
   for (const b of document.querySelectorAll('[data-tool], [data-c], [data-w], [data-fill], [data-cmd]')) {
     const d = b.dataset;
     if (d.cmd) b.disabled = d.cmd === 'undo' ? !step : d.cmd === 'redo' ? step === hist.length - 1 : !s;
-    else b.setAttribute('aria-pressed', d.tool ? d.tool === tool : d.c ? d.c === now.c : d.w ? d.w * dpr === now.w : filled(s));
+    else b.setAttribute('aria-pressed', d.tool ? d.tool === tool : d.c ? d.c === now.c : d.w ? +d.w === Math.round(now.w) : !!now.fill);
   }
   // The dock shows only what applies to the selected shape, else to the tool: c(olor) w(idth) f(ill) s(ize) d(elete). Empty hides it.
   $('props').dataset.k = (KINDS[s?.type ?? tool] + (s ? ' d' : '')).trim();
-  $('tsize').textContent = Math.round((s?.size ?? style.pen.size) / dpr);
+  $('tsize').textContent = now.size ? Math.round(now.size) : '';
   report();
 }
 // Each history step is [shapes, crop].
@@ -404,14 +410,13 @@ $('tools').onclick = $('props').onclick = ({ target }) => {
     cur = null;
   } else if (d.cmd) { if (cropping()) endCrop(); ({ undo: () => go(-1), redo: () => go(1), del: remove })[d.cmd](); }
   else {
-    // A style button sets the style for new shapes of that kind and restyles the selected shape.
-    // Text size and fill only apply to some shapes, so they always come from and go to the main style.
+    // A style button restyles the selected shape and sets its tool's style (the next shape of that kind gets it too).
     const k = d.c ? 'c' : d.w ? 'w' : d.size ? 'size' : 'fill' in d ? 'fill' : null;
     if (!k) return;
-    const v = k === 'c' ? d.c : k === 'w' ? d.w * dpr : k === 'size' ? nextSize((s?.size ?? style.pen.size) / dpr, +d.size) * dpr : !filled(s);
-    (k === 'size' || k === 'fill' ? style.pen : styleOf(s?.type ?? tool))[k] = v;
+    const now = styleNow(s), v = k === 'c' ? d.c : k === 'w' ? +d.w : k === 'size' ? nextSize(now.size, +d.size) : !now.fill;
+    setStyle(s?.type ?? tool, k, v);
     if (s && k in s) {
-      shapes[cur] = { ...s, [k]: v };
+      shapes[cur] = { ...s, [k]: k === 'w' || k === 'size' ? v * dpr : v };
       return editing == null ? commit() : render(); // an open edit commits its style with its text
     }
   }
@@ -449,13 +454,13 @@ edit.oninput = () => shapes[editing]?.tip && render(); // a callout's box follow
 addEventListener('beforeprint', finishEdit);
 
 function newShape(p) {
-  const { c, w, size } = styleOf(tool);
+  const st = styleOf(tool), c = st.c, w = st.w * dpr, size = st.size * dpr;
   if (tool === 'pen' || tool === 'hl') return { type: tool, c, w, pts: [p] };
   if (tool === 'line') return { type: tool, c, w, pts: [p, p] };
   // dpr: arrowheads, callout pointers and cloud scallops keep the minimum size they had when drawn
   if (tool === 'arrow') return { type: tool, c, w, dpr, pts: [p, p] };
   if (tool === 'callout') return { type: tool, c, w, dpr, size, x: p[0], y: p[1], text: '', em: 0, tip: p };
-  return { type: tool, c, w, dpr, fill: style.pen.fill, l: p[0], t: p[1], r: p[0], b: p[1] };
+  return { type: tool, c, w, dpr, fill: st.fill, l: p[0], t: p[1], r: p[0], b: p[1] };
 }
 const atInk = ev => { const [x, y] = at(ev); return [x + off.x, y + off.y]; };
 // A handle of the selected shape resizes it; otherwise Select picks and moves, Text places or edits on release, and the rest draw.
@@ -491,7 +496,7 @@ function markDown(e) {
     stage.onpointerup = () => {
       stage.onpointerup = null;
       if (hit && shapes[hi].size) return startEdit(hi);
-      const { c, size } = styleOf(tool);
+      const { c } = styleOf(tool), size = styleOf(tool).size * dpr;
       startEdit(shapes.push({ type: 'text', c, size, x: p0[0], y: newTextY(p0[1], size, off.y), text: '', em: 0 }) - 1);
     };
     return;
