@@ -18,6 +18,20 @@ Win+Shift+S and PrtScn work as always, and every snip opens in justMark, ready t
 - Snipping Tool's **Automatically save screenshots** turned on (Snipping Tool > Settings). justMark watches the
   Screenshots folder for new snips; it follows the folder if it moves (e.g. OneDrive backup of Pictures).
 
+## Install
+
+**Recommended: build it yourself.** Clone the repo (or **Code > Download ZIP** and extract it), install
+[Node.js](https://nodejs.org) and [Rust](https://rustup.rs), then double-click `promote.cmd`. It builds the installer
+and installs justMark for your account (`%LOCALAPPDATA%\justMark`, no admin needed), then starts it.
+
+**Or download the installer** (`justMark_<version>_x64-setup.exe`) from
+[Releases](https://github.com/kernelhappy/justMark/releases). It isn't code-signed, so Windows SmartScreen will say
+"Windows protected your PC": click **More info > Run anyway**. That warning is why building it yourself is the
+recommended path.
+
+Either way, justMark lives in the tray. Turn on **Start at login** in Settings to have it start with Windows.
+Uninstall from Settings > Apps.
+
 ## Editing
 
 | Tool | Key | | Tool | Key |
@@ -65,11 +79,16 @@ Needs [Node.js](https://nodejs.org) and [Rust](https://rustup.rs).
 
 ```sh
 npm install
-npx tauri build --no-bundle   # → src-tauri/target/release/justmark.exe
+npx tauri build               # → src-tauri/target/release/bundle/nsis/justMark_<version>_x64-setup.exe
+npx tauri build --no-bundle   # → src-tauri/target/release/justmark.exe only
 ```
 
-`build-release.cmd` does the same with a double-click: quits the running tray, builds, starts the new exe.
-Drop `--no-bundle` for an NSIS installer, which also registers the file associations.
+Two double-click scripts (both quit any running justMark first; only one copy can run at a time):
+
+- `promote.cmd` builds the installer, installs it silently (updating in place if it's already installed) and starts it.
+- `build-release.cmd` builds just the exe and starts it from `src-tauri/target/release`, for trying changes without
+  touching the installed copy. A build under `target` leaves Start at login and the right-click entry pointing at the
+  installed copy. Quit it from the tray and start justMark from the Start menu to go back.
 
 Tests: `node test.mjs` (editor) and `cargo test` in `src-tauri` (Rust side).
 
@@ -79,3 +98,7 @@ Tauri 2 with a vanilla HTML/JS editor, no bundler, no framework. The Rust side (
 the tray, the folder watcher, windows and file I/O; the editor (`src/`) is an SVG markup editor shared with
 JustSave. Each snip gets its own window, and when the last one closes, WebView2's processes exit, which is why idle
 memory stays tiny.
+
+## License
+
+[MIT](LICENSE)
