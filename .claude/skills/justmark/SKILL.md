@@ -168,7 +168,9 @@ So mouse-up → editor visible ≈ 0.6–0.8 s. Regressions past ~1 s or idle pa
 
 ## Release
 
-Bump `version` in `tauri.conf.json` and `Cargo.toml`, commit, push, `npx tauri build`, then zip the exe and
+Bump `version` in `tauri.conf.json` and `Cargo.toml`, commit, push, `npx tauri build` with
+`RUSTFLAGS=--remap-path-prefix=%USERPROFILE%=~` (as `promote.cmd` sets it; otherwise the exe embeds
+`C:\Users\<name>\.cargo\registry\…` paths), then zip the exe and
 `LICENSE` as `justMark_X.Y.Z_x64-portable.zip` (`Compress-Archive`) and
 `gh release create vX.Y.Z <setup.exe> <portable.zip>`. Both unsigned (README explains SmartScreen and recommends
 building from source). 0.8.0 = first public release (2026-10-18).

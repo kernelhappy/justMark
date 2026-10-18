@@ -3,6 +3,9 @@ rem Double-click: quit any justMark (dev or stable), build the installer, instal
 rem copy (%LOCALAPPDATA%\justMark) and start it. Later runs update in place, keeping your shortcuts as they are.
 cd /d "%~dp0"
 taskkill /im justmark.exe >nul 2>&1
+rem Keep the user profile path (username) out of the exe's embedded dependency paths. Same flags as
+rem build-release.cmd, so switching between the two doesn't force a full rebuild.
+set RUSTFLAGS=--remap-path-prefix=%USERPROFILE%=~
 call npx tauri build
 if errorlevel 1 (
   echo.
