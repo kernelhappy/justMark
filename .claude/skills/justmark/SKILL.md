@@ -166,6 +166,13 @@ So mouse-up → editor visible ≈ 0.6–0.8 s. Regressions past ~1 s or idle pa
   png/jpg/jpeg. The NSIS uninstaller removes the verb (`src-tauri/windows/hooks.nsh`, skipped with `/UPDATE`); it
   leaves the Run entry, since a GUI upgrade that uninstalls first would otherwise turn Start at login off.
 
+## Release
+
+Bump `version` in `tauri.conf.json` and `Cargo.toml`, commit, push, `npx tauri build`, then zip the exe and
+`LICENSE` as `justMark_X.Y.Z_x64-portable.zip` (`Compress-Archive`) and
+`gh release create vX.Y.Z <setup.exe> <portable.zip>`. Both unsigned (README explains SmartScreen and recommends
+building from source). 0.8.0 = first public release (2026-10-18).
+
 ## Non-goals
 
 Own capture overlay; taking over Win+Shift+S; MSIX packaging / `ms-screenclip` redirect (only if the

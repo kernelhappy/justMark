@@ -28,5 +28,5 @@
 - [ ] Very large snips: end-marker wait has a 5 s cap; unmeasured for 4K multi-monitor snips.
 - [ ] Default tool is Select (as in JustSave); consider starting on Arrow/Rect if the first drag doing
       nothing feels wrong.
-- [ ] Real app icon (current one is a placeholder drawn with System.Drawing).
-- [ ] `tauri build` (NSIS installer) not yet run; file associations untested until installed.
+- [x] Real app icon (brand kit, 2026-10-13).
+- [x] NSIS installer built and installed (0.8.0, 2026-10-18); Open with points at the installed exe.

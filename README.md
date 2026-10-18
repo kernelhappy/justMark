@@ -24,10 +24,14 @@ Win+Shift+S and PrtScn work as always, and every snip opens in justMark, ready t
 [Node.js](https://nodejs.org) and [Rust](https://rustup.rs), then double-click `promote.cmd`. It builds the installer
 and installs justMark for your account (`%LOCALAPPDATA%\justMark`, no admin needed), then starts it.
 
-**Or download the installer** (`justMark_<version>_x64-setup.exe`) from
-[Releases](https://github.com/kernelhappy/justMark/releases). It isn't code-signed, so Windows SmartScreen will say
-"Windows protected your PC": click **More info > Run anyway**. That warning is why building it yourself is the
-recommended path.
+**Or download a build** from [Releases](https://github.com/kernelhappy/justMark/releases):
+
+- `justMark_<version>_x64-setup.exe`: the installer. Adds Open with associations, Start menu entry and an uninstaller.
+- `justMark_<version>_x64-portable.zip`: just `justmark.exe`. Extract it anywhere and run it. No Open with
+  associations; to remove it, turn off Start at login and the right-click entry in Settings, then delete the exe.
+
+Neither is code-signed, so Windows SmartScreen will say "Windows protected your PC": click **More info > Run
+anyway**. That warning is why building it yourself is the recommended path.
 
 Either way, justMark lives in the tray. Turn on **Start at login** in Settings to have it start with Windows.
 Uninstall from Settings > Apps.
