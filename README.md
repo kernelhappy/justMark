@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/brand/logos/justMark_logo_dark.png">
-    <img alt="justMark" src="assets/brand/logos/justMark_logo_light.png" width="420">
+    <source media="(prefers-color-scheme: dark)" srcset="src/assets/logo-dark.png">
+    <img alt="justMark" src="src/assets/logo-light.png" width="420">
   </picture>
 </p>
 

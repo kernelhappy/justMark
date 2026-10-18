@@ -60,7 +60,7 @@ smaller image encoded first), Rust writes nothing and the markup stays unsaved: 
 - Shown as **justMark** everywhere a user reads it (tray tooltip/Quit, window titles, Explorer verb text via
   `MUIVerb`, productName). Internal names stay `JustMark`/`justmark` so nothing is orphaned: identifier
   `io.github.justmark` (settings dir), the verb key, the `JustMark.Image` ProgID, the Run entry name, crate/package.
-- Masters live in `assets/brand/` (not shipped). App/tray icon = `icon_light` (teal plate reads on light and dark
+- Masters live in `assets/brand/` (not shipped; local only, gitignored like `reports/`). App/tray icon = `icon_light` (teal plate reads on light and dark
   taskbars, so no theme swap) padded square → `npx tauri icon` → only `icon.ico` is kept in `src-tauri/icons/`.
 - About = the Settings window's header: `src/assets/logo-{light,dark}.png` (480 px wide) swapped by
   `prefers-color-scheme`, plus the version.
