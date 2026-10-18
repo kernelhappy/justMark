@@ -44,8 +44,8 @@ window-opening rules apply before any page exists); a missing file or field mean
 | New snip opens a new window | on | Off: the snip replaces the image in the last-focused editor if it has no unsaved work; otherwise a new window opens. The replaced editor keeps its size and position, and the new image is fit to it (the page reloads: undo history starts over). Open with always gets a new window. |
 | Max windows | 5 | Opening one more closes the oldest-**opened** window **without** unsaved work; if every window has unsaved work, the oldest closes anyway, silently (user's call: bounds memory on bursts, e.g. bulk copies or OneDrive sync-down). Counts every editor, however it was opened. |
 | Auto copy on focus loss | off | When an editor loses focus and has unsaved work, it copies the marked-up PNG (same as Copy, so Esc then closes without asking; but it still counts as unsaved work for Max windows and replace-in-place, since taking a snip is itself a focus loss). Not for focus lost to its own Save/Print dialog or close confirm. |
-| Start at login | off | HKCU Run entry, quoted exe path, via the `auto-launch` crate in CurrentUser mode. The checkbox flips the entry's real state (Task Manager can change it behind the window). |
-| Right-click "JustMark" in Explorer | on | The classic verb on images (see Explorer right-click), written under HKCU when on, removed when off; re-pointed at this exe at startup. |
+| Start at login | off | HKCU Run entry, quoted exe path, via the `auto-launch` crate in CurrentUser mode. The checkbox flips the entry's real state (Task Manager can change it behind the window). Re-pointed at this exe at startup when on, except from a dev exe (any path under a `target` dir). |
+| Right-click "JustMark" in Explorer | on | The classic verb on images (see Explorer right-click), written under HKCU when on, removed when off; re-pointed at this exe at startup, except from a dev exe. |
 
 "Unsaved work" = the same check as Esc's confirm (markup or crop not Saved or Copied since), plus a text
 being typed or a stroke being drawn. The page reports it to Rust (`dirty`) whenever it changes.
@@ -104,8 +104,8 @@ smaller image encoded first), Rust writes nothing and the markup stays unsaved: 
     cropping it becomes the crop bar (hint, Reset, Cancel, Apply).
   - *Zoom pill* (bottom right): −, % (click = actual size), +, Fit, Fit width.
   - *Status* is a toast above the dock; Saved/Copied fade after 2.5 s, errors stay until clicked.
-  - Theme: system light/dark via `light-dark()` tokens on `:root`; violet accent so UI state never looks
-    like ink (no swatch is violet). Tooltips are CSS (`aria-label` + `data-tip`), not `title`.
+  - Theme: system light/dark via `light-dark()` tokens on `:root`; brand-teal accent (`#004b5e` light / `#0fa5b6` dark, from the logo) so UI state never looks
+    like ink (no swatch is teal). Tooltips are CSS (`aria-label` + `data-tip`), not `title`.
 - **Tests**: `node test.mjs` (markup/pdf/editor tests carried from JustSave + JustMark's); `cargo test`
   in `src-tauri` (end-marker wait).
 
@@ -163,7 +163,8 @@ So mouse-up → editor visible ≈ 0.6–0.8 s. Regressions past ~1 s or idle pa
   `HKCU\Software\Classes\SystemFileAssociations\.<ext>\shell\JustMark\command` = `"<exe>" "%1"`. The app
   writes it per a Settings toggle (on by default) and re-points it at startup, like Start at login. On
   Windows 11 it shows under Show more options. File associations get bmp/gif/webp too; the watcher stays
-  png/jpg/jpeg. Revisit (NSIS uninstall hook, install-time option) once there's an installer.
+  png/jpg/jpeg. The NSIS uninstaller removes the verb (`src-tauri/windows/hooks.nsh`, skipped with `/UPDATE`); it
+  leaves the Run entry, since a GUI upgrade that uninstalls first would otherwise turn Start at login off.
 
 ## Non-goals
 

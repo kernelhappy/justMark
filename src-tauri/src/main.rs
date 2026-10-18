@@ -737,6 +737,16 @@ fn context_verb(base: &str, exe: &Path, on: bool) -> std::io::Result<()> {
 
 const VERB_BASE: &str = r"Software\Classes\SystemFileAssociations";
 
+fn is_dev_exe(exe: &Path) -> bool {
+    exe.components().any(|c| c.as_os_str().eq_ignore_ascii_case("target"))
+}
+
+#[test]
+fn dev_exe_is_one_under_target() {
+    assert!(is_dev_exe(Path::new(r"C:\src\justMark\src-tauri\target\release\justmark.exe")));
+    assert!(!is_dev_exe(Path::new(r"C:\Users\John Smith\AppData\Local\justMark\justmark.exe")));
+}
+
 #[test]
 fn context_verb_is_written_quoted_and_removed() {
     let base = r"Software\JustMarkTest\SystemFileAssociations";
@@ -803,18 +813,23 @@ fn main() {
             if !set_hotkey(&h, &s.hotkey) {
                 log!("hotkey {} is taken", s.hotkey);
             }
-            // The right-click verb follows the setting, re-pointed at this exe (like Start at login, a moved or dev exe).
-            if let Err(e) = context_verb(VERB_BASE, &std::env::current_exe()?, s.context_menu) {
-                log!("right-click entry: {e}");
+            // The right-click verb follows the setting, re-pointed at this exe (like Start at login, a moved exe).
+            // A dev build (under cargo's target dir) leaves both pointing at the installed copy.
+            let exe = std::env::current_exe()?;
+            let dev = is_dev_exe(&exe);
+            if !dev {
+                if let Err(e) = context_verb(VERB_BASE, &exe, s.context_menu) {
+                    log!("right-click entry: {e}");
+                }
             }
             app.manage(Config(Mutex::new(s), file));
             for a in std::env::args_os().skip(1) {
                 open(&h, a.into(), Instant::now(), false, false);
             }
             // Start at login is an HKCU Run entry for this exe, off until ticked in Settings.
-            // An entry left by another copy (dev build, moved exe) still reads as enabled, so re-point it here.
-            let a = login_launcher(&std::env::current_exe()?);
-            if a.is_enabled()? {
+            // An entry left by another copy (moved exe) still reads as enabled, so re-point it here.
+            let a = login_launcher(&exe);
+            if !dev && a.is_enabled()? {
                 let _ = a.enable();
             }
             app.manage(a);
